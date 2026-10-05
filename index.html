@@ -1,0 +1,2602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能演讲伴侣 - 沉浸版 (Pro)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    boxShadow: { 'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)' }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        body {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        .view { transition: opacity 0.3s ease, transform 0.3s ease; }
+        .view.hidden { opacity: 0; pointer-events: none; position: absolute; visibility: hidden; transform: translateY(10px); }
+        .view:not(.hidden) { opacity: 1; visibility: visible; transform: translateY(0); position: relative; }
+
+        .sentence-block {
+            display: block;
+            margin-bottom: 2rem;
+            padding: 1.5rem 2rem;
+            border-radius: 1.25rem;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            background-color: transparent;
+            border: 1px solid transparent;
+        }
+        .sentence-past { opacity: 0.25; filter: grayscale(100%); }
+        .sentence-future { opacity: 0.6; }
+        
+        .sentence-active { 
+            opacity: 1; 
+            background-color: rgba(254, 240, 138, 0.15);
+            border-color: rgba(250, 204, 21, 0.3);
+            box-shadow: 0 10px 30px -10px rgba(250, 204, 21, 0.15);
+        }
+
+        .word-token {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 0.3rem 0.4rem;
+            margin: 0.15rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s ease-out;
+            border: 1px solid transparent;
+        }
+        
+        .word-active { 
+            background-color: #fde047;
+            color: #0f172a; 
+            box-shadow: 0 4px 12px rgba(253, 224, 71, 0.4);
+            border-color: #facc15;
+            z-index: 10;
+        }
+        .word-past { color: #94a3b8; }
+        .word-future { color: #475569; transition: color 0.3s ease; }
+        .word-future:hover { background-color: rgba(0,0,0,0.03); color: #0f172a; }
+
+        .word-text { display: block; line-height: 1.1; }
+
+        .word-note {
+            display: block;
+            font-size: 0.85rem;
+            line-height: 1.25rem;
+            height: 1.25rem;
+            color: #6366f1;
+            font-weight: 500;
+            margin-top: 0.3rem;
+            white-space: nowrap;
+            overflow: visible;
+            letter-spacing: 0.02em;
+        }
+
+        #prompter-content { 
+            word-break: keep-all; 
+            overflow-wrap: break-word; 
+            letter-spacing: 0.01em;
+        }
+
+        .glass-header {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+
+        .modal-enter { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        /* 便利贴模块 */
+        #sticky-note-panel {
+            width: 200px;
+            min-width: 200px;
+            background: #fef9c3;
+            border-right: 1px solid #fde68a;
+            display: flex;
+            flex-direction: column;
+            z-index: 40;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.04);
+            position: relative;
+            flex: 1;
+            min-height: 0;
+        }
+        #sticky-note-panel::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #fbbf24, #f59e0b);
+        }
+        #sticky-note-header {
+            padding: 14px 14px 8px;
+            margin-top: 4px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #92400e;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+        #sticky-note-textarea {
+            flex: 1;
+            min-height: 0;
+            min-height: 0;
+            width: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            resize: none;
+            font-size: 0.8rem;
+            line-height: 1.7;
+            color: #78350f;
+            font-family: 'Inter', sans-serif;
+            padding: 8px 14px 8px;
+            box-sizing: border-box;
+        }
+        #sticky-note-textarea::placeholder { color: #d97706; opacity: 0.55; }
+        .sticky-drop-zone {
+            flex-shrink: 0;
+            border-top: 1.5px dashed #fde68a;
+            padding: 8px 10px;
+            text-align: center;
+            color: #b45309;
+            font-size: 0.68rem;
+            font-weight: 600;
+            transition: all 0.15s;
+            background: rgba(251,191,36,0.08);
+            letter-spacing: 0.02em;
+        }
+        .sticky-drop-zone.drag-over {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        /* 可拖拽的词语 */
+        .word-token[draggable="true"] { cursor: grab; }
+        .word-token.dragging { opacity: 0.4; cursor: grabbing; }
+
+        /* ===== 小窗模式 ===== */
+        #mini-window {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 380px;
+            background: rgba(15, 18, 30, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 24px 60px rgba(0,0,0,0.45), 0 0 0 0.5px rgba(255,255,255,0.05) inset;
+            z-index: 9999;
+            overflow: hidden;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            user-select: none;
+        }
+        #mini-window.visible {
+            display: block;
+            animation: miniPop 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes miniPop {
+            from { opacity: 0; transform: scale(0.92) translateY(12px); }
+            to   { opacity: 1; transform: scale(1)  translateY(0); }
+        }
+
+        /* 拖动条 */
+        #mini-drag-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px 6px;
+            cursor: grab;
+        }
+        #mini-drag-bar:active { cursor: grabbing; }
+        #mini-drag-dots {
+            display: flex; gap: 5px;
+        }
+        #mini-drag-dots span {
+            width: 10px; height: 10px; border-radius: 50%;
+            display: block;
+        }
+        #mini-close-btn {
+            background: #ff5f57; 
+        }
+        #mini-min-btn   { background: #febc2e; }
+        #mini-expand-btn { background: #28c840; }
+        #mini-title {
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: rgba(255,255,255,0.3);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        /* 上下文行 */
+        .mini-line {
+            padding: 3px 18px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            line-height: 1.5;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .mini-line-past {
+            color: rgba(255,255,255,0.2);
+            font-size: 0.78rem;
+            font-weight: 500;
+        }
+        .mini-line-prev {
+            color: rgba(255,255,255,0.35);
+            font-size: 0.88rem;
+        }
+        .mini-line-active {
+            color: rgba(255,255,255,0.75);
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: 6px 18px;
+            background: rgba(253,224,71,0.06);
+            border-left: 2px solid rgba(253,224,71,0.5);
+        }
+        .mini-word-past { color: rgba(255,255,255,0.25); }
+        .mini-word-active {
+            background: #fde047;
+            color: #0f172a;
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-weight: 800;
+            box-shadow: 0 2px 10px rgba(253,224,71,0.45);
+        }
+        .mini-word-future { color: rgba(255,255,255,0.72); }
+        .mini-line-next {
+            color: rgba(255,255,255,0.45);
+            font-size: 0.88rem;
+        }
+        .mini-line-future {
+            color: rgba(255,255,255,0.18);
+            font-size: 0.78rem;
+            font-weight: 500;
+        }
+
+        /* 进度条 */
+        #mini-progress-track {
+            height: 2px;
+            background: rgba(255,255,255,0.06);
+            margin: 10px 18px 14px;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        #mini-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6366f1, #fde047);
+            border-radius: 2px;
+            transition: width 0.4s ease;
+        }
+
+        /* 触发提示 */
+        #mini-trigger-hint {
+            display: none;
+            position: fixed;
+            bottom: 16px;
+            right: 16px;
+            background: rgba(15,18,30,0.85);
+            backdrop-filter: blur(12px);
+            color: rgba(255,255,255,0.5);
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.08);
+            z-index: 9998;
+            letter-spacing: 0.04em;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+
+        /* ===== 红色高光标记 ===== */
+        .word-highlight {
+            background: linear-gradient(135deg, rgba(239,68,68,0.18) 0%, rgba(239,68,68,0.10) 100%);
+            border-color: rgba(239,68,68,0.35) !important;
+            border-radius: 0.45rem;
+            position: relative;
+            z-index: 1;
+        }
+        .word-highlight .word-text { color: #dc2626; font-weight: 700; }
+        /* 黄色光标层级高于红色标记：当词同时是 active 和 highlight 时，黄色优先 */
+        .word-active.word-highlight {
+            background-color: #fde047 !important;
+            border-color: #facc15 !important;
+            z-index: 15;
+        }
+        .word-active.word-highlight .word-text { color: #0f172a !important; }
+        body.highlight-mode .word-token:not(.word-highlight):hover {
+            background: rgba(239,68,68,0.08);
+            border-color: rgba(239,68,68,0.2) !important;
+            cursor: crosshair;
+        }
+        body.highlight-mode .word-highlight:hover { cursor: crosshair; }
+        #highlight-toolbar {
+            display: none;
+            position: fixed;
+            top: 72px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(220,38,38,0.95);
+            backdrop-filter: blur(12px);
+            color: #fff;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 7px 18px 7px 14px;
+            border-radius: 99px;
+            box-shadow: 0 6px 24px rgba(220,38,38,0.35);
+            z-index: 200;
+            letter-spacing: 0.04em;
+            align-items: center;
+            gap: 10px;
+            animation: miniPop 0.25s cubic-bezier(0.16,1,0.3,1) forwards;
+            user-select: none;
+        }
+        #highlight-toolbar.active { display: flex; }
+        #highlight-toolbar .hl-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: rgba(255,255,255,0.7);
+            animation: pulse-dot 1s infinite;
+        }
+        @keyframes pulse-dot {
+            0%,100%{opacity:1;transform:scale(1)}
+            50%{opacity:0.5;transform:scale(0.75)}
+        }
+        /* ===== 计时器 ===== */
+        #timer-display {
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.05em;
+            font-size: 2rem;
+            font-weight: 800;
+            text-align: center;
+            line-height: 1;
+            transition: color 0.4s;
+            color: #1e293b;
+        }
+        #timer-display.warn   { color: #f59e0b; }
+        #timer-display.danger { color: #ef4444; }
+        #timer-progress-track {
+            height: 4px; background: #e2e8f0;
+            border-radius: 4px; overflow: hidden;
+        }
+        #timer-progress-fill {
+            height: 100%; border-radius: 4px;
+            transition: width 1s linear, background 0.4s;
+            background: #6366f1;
+        }
+        /* ===== 转录框滚动跳转按钮 ===== */
+        #transcript-wrapper { position: relative; }
+        #transcript-jump-btn {
+            display: none;
+            position: absolute;
+            bottom: 8px; right: 8px;
+            background: rgba(99,102,241,0.9);
+            color: #fff;
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 99px;
+            cursor: pointer;
+            z-index: 10;
+            letter-spacing: 0.03em;
+            box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+            border: none;
+        }
+        #transcript-box::-webkit-scrollbar { width: 4px; }
+        #transcript-box::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+        /* 工具栏独立于正文，计时器不再覆盖阅读区域。 */
+        main, #view-present, #present-column { min-height: 0; min-width: 0; }
+        #present-column { display: flex; flex: 1; flex-direction: column; }
+        #present-toolbar {
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 8px; padding: 10px 18px;
+            background: #f8fafc; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;
+        }
+        #timer-widget { display: flex; justify-content: center; }
+        #timer-widget > div { border-radius: 14px !important; border-top: 1px solid #bae6fd !important; }
+        #present-toolbar #highlight-toolbar { position: static; transform: none; flex-basis: 100%; border-radius: 10px; white-space: normal; animation: none; }
+        #present-scroll-container { min-height: 0; min-width: 0; overflow-anchor: none; scroll-behavior: auto; }
+        #present-scroll-container:focus-visible { outline: 2px solid #818cf8; outline-offset: -2px; }
+        #follow-current-btn { border: 1px solid #c7d2fe; border-radius: 10px; padding: 8px 12px; color: #4338ca; background: #eef2ff; font-size: 12px; font-weight: 600; cursor: pointer; }
+        #follow-current-btn:disabled { border-color: transparent; background: transparent; color: #64748b; cursor: default; }
+        #tracking-status { font-size: 12px; color: #64748b; margin-top: 10px; line-height: 1.6; }
+        .sentence-block { transition: opacity .18s ease, background-color .18s ease, border-color .18s ease; }
+        #prompter-content { font-size: clamp(28px, 3.7vw, 56px); }
+        #prompter-content .word-note { max-width: 12em; overflow-wrap: anywhere; white-space: normal; height: auto; min-height: 1.25rem; }
+        #prompter-content .word-text { max-width: 100%; overflow-wrap: anywhere; }
+        .word-token { max-width: 100%; }
+        .present-sidebar { display: flex; flex-direction: column; flex-shrink: 0; min-height: 0; overflow: hidden; }
+        #sticky-note-column { width: 200px; min-width: 200px; background: #fef9c3; }
+        #console-column { width: 320px; background: #fff; }
+        #present-console { width: 100%; height: 100%; min-height: 0; }
+        .present-sidebar.is-collapsed { width: 44px !important; min-width: 44px !important; }
+        #console-column.is-collapsed { border-left: 1px solid #e2e8f0; background: #f8fafc; }
+        .sidebar-collapse { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer; }
+        .sidebar-collapse:hover, .sidebar-restore:hover { background: #eef2ff; color: #4338ca; }
+        #notes-collapse-btn { border-color: #fde68a; color: #92400e; background: #fefce8; }
+        .sidebar-restore { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px 6px; width: 100%; height: 100%; background: transparent; border: 0; color: #64748b; font-size: 12px; font-weight: 600; cursor: pointer; }
+        .sidebar-restore span { writing-mode: vertical-rl; letter-spacing: .15em; }
+        #notes-expand-btn { color: #92400e; }
+        .sidebar-collapse:focus-visible, .sidebar-restore:focus-visible { outline: 2px solid #818cf8; outline-offset: -2px; }
+        .console-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+        #sticky-note-header .note-actions { display: flex; align-items: center; gap: 8px; }
+        #toolbar-mic-btn { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 10px; padding: 8px 12px; background: #4f46e5; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+        #toolbar-mic-btn[aria-pressed="true"] { background: #ef4444; }
+        #sticky-note-panel[hidden], #present-console[hidden], .sidebar-restore[hidden], #toolbar-mic-btn[hidden] { display: none !important; }
+        #present-column { container-type: inline-size; }
+        #present-scroll-container > div { max-width: 1200px; }
+        #prompter-content { font-size: clamp(28px, 5.8cqw, 56px); }
+        @media (max-width: 1199px) {
+            #console-column { width: 260px; }
+            #present-console { padding: 18px; }
+            .sentence-block { padding: 1rem; }
+        }
+        @media (max-width: 760px) {
+            #view-present { flex-direction: column; }
+            #sticky-note-column, #console-column, .present-sidebar.is-collapsed { width: 100% !important; min-width: 0 !important; }
+            #sticky-note-column { height: min(160px, 20vh); }
+            #sticky-note-panel { width: 100%; min-width: 0; }
+            #sticky-note-panel { width: 100%; min-width: 0; }
+            .present-sidebar.is-collapsed { height: 40px !important; min-height: 40px; }
+            #console-column { max-height: 36vh; }
+            .sidebar-restore { flex-direction: row; justify-content: center; gap: 8px; padding: 8px 12px; }
+            .sidebar-restore span { writing-mode: horizontal-tb; letter-spacing: normal; }
+            .sidebar-restore svg { transform: rotate(90deg); }
+            #present-console { width: 100%; max-height: 36vh; padding: 12px 16px; border-left: 0; border-top: 1px solid #e2e8f0; flex-shrink: 0; }
+            #present-console > div { margin-top: 14px; }
+            #present-console > div:first-child { margin-top: 0; }
+            #present-console h3 { font-size: 14px; }
+            .console-heading { margin-bottom: 8px; }
+            #console-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+            #present-console button { margin-top: 0; padding: 10px; }
+            #present-console .sidebar-collapse { padding: 0; }
+            #pip-sidebar-btn { display: none; }
+            #present-toolbar { padding: 8px; justify-content: center; }
+            #timer-widget > div { padding: 7px 10px !important; gap: 6px !important; }
+            #timer-progress-track { display: none; }
+            #present-scroll-container > div { padding: 20px 12px 60vh; }
+            #main-header { padding: 12px 16px; }
+            #main-header h1 { font-size: 17px; }
+            #main-header h1 > span { display: none; }
+            #header-actions button { padding: 8px 10px; font-size: 13px; }
+            #view-edit { padding: 12px; }
+            #view-edit > div:first-child { padding: 20px; }
+            #view-edit > div:last-child { flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+            #view-edit > div:last-child > button { padding: 10px 18px; font-size: 16px; }
+            #edit-title { font-size: 28px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation: none !important; transition: none !important; }
+        }
+
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans h-screen overflow-hidden flex flex-col selection:bg-yellow-200 selection:text-slate-900">
+
+    <header class="glass-header px-6 py-4 flex items-center justify-between z-30 sticky top-0 transition-all duration-300" id="main-header">
+        <div class="flex items-center space-x-3 cursor-pointer group" onclick="navigate('home')">
+            <div class="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-600/20 group-hover:scale-105 group-hover:bg-indigo-500 transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            </div>
+            <h1 class="text-xl font-bold text-slate-800 tracking-tight">VocalFlow <span class="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md ml-2 font-semibold tracking-wider uppercase border border-indigo-100">Pro</span></h1>
+        </div>
+        <div id="header-actions" class="flex items-center space-x-4"></div>
+    </header>
+
+    <div id="error-banner" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 mx-6 mt-4 flex items-start space-x-3 z-50 shadow-sm">
+        <svg class="text-red-500 mt-0.5" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+        <p id="error-msg" class="text-red-700 text-sm font-medium"></p>
+    </div>
+
+    <main class="flex-1 flex flex-col overflow-hidden relative">
+        
+        <div id="view-home" class="view hidden flex-1 overflow-y-auto p-6 md:p-10 w-full max-w-7xl mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 space-y-4 md:space-y-0">
+                <div>
+                    <h2 class="text-3xl font-extrabold text-slate-900 mb-2 tracking-tight">我的演讲库</h2>
+                    <p class="text-slate-500 font-medium">语音跟随与实时提词，每一次开口都自信从容。</p>
+                </div>
+                <button onclick="createNewScript()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold flex items-center space-x-2 shadow-lg shadow-indigo-600/30 transition-all transform hover:-translate-y-0.5 active:scale-95">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                    <span>新建稿件</span>
+                </button>
+            </div>
+            <div id="scripts-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+        </div>
+
+        <div id="view-edit" class="view hidden flex-1 flex flex-col p-6 max-w-5xl w-full mx-auto">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col p-8 overflow-hidden">
+                <input id="edit-title" type="text" class="text-4xl font-extrabold bg-transparent border-none focus:ring-0 outline-none mb-6 text-slate-900 placeholder-slate-300 w-full tracking-tight" placeholder="输入演讲标题...">
+                
+                <div class="flex flex-wrap items-center gap-4 mb-6 pb-6 border-b border-slate-100">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-slate-500 text-sm font-medium">语音引擎</span>
+                        <select id="edit-lang" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block p-2 outline-none transition-shadow font-medium">
+                            <option value="en-US">English (US/International)</option>
+                            <option value="zh-CN">中文 (简体)</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center space-x-1.5 text-xs text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-md border border-emerald-100 font-medium">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                        <span>支持实时语音跟随</span>
+                    </div>
+                </div>
+
+                <textarea id="edit-content" class="flex-1 w-full text-lg border-none focus:ring-0 outline-none resize-none bg-transparent text-slate-700 placeholder-slate-300 leading-relaxed font-medium custom-scrollbar" placeholder="在此尽情书写您的演讲内容..."></textarea>
+            </div>
+            
+            <div class="mt-6 flex justify-between items-center px-2">
+                <span id="save-status" class="text-sm font-medium text-slate-400 flex items-center space-x-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                    <span>已保存至本地</span>
+                </span>
+                <button onclick="startPresentation()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-bold text-lg flex items-center shadow-xl shadow-indigo-600/20 transition-all transform hover:-translate-y-1 active:scale-95">
+                    <svg class="mr-2" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    进入提词模式
+                </button>
+            </div>
+        </div>
+
+        <div id="view-present" class="view hidden flex-1 overflow-hidden bg-slate-50/50 flex flex-row">
+
+            <!-- 左侧：便利贴 -->
+            <aside id="sticky-note-column" class="present-sidebar" aria-label="便利贴">
+            <button id="notes-expand-btn" class="sidebar-restore" onclick="toggleSidebar('notes')" aria-label="展开便利贴" title="展开便利贴" aria-controls="sticky-note-panel" aria-expanded="false" hidden>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg><span>便利贴</span>
+            </button>
+            <div id="sticky-note-panel">
+                <div id="sticky-note-header">
+                    <span>📝 便利贴</span>
+                    <div class="note-actions">
+                        <button onclick="clearStickyNote()" title="清空便利贴" style="background:none;border:none;cursor:pointer;color:#b45309;font-size:11px;padding:0;">清空</button>
+                        <button id="notes-collapse-btn" class="sidebar-collapse" onclick="toggleSidebar('notes')" aria-label="收起便利贴" title="收起便利贴" aria-controls="sticky-note-panel" aria-expanded="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg></button>
+                    </div>
+                </div>
+                <textarea id="sticky-note-textarea" placeholder="在此自由记录笔记..." oninput="saveStickyNote()"></textarea>
+                <div id="sticky-drop-zone" class="sticky-drop-zone">
+                    拖入词语 → 自动翻译并记录
+                </div>
+            </div><!-- /sticky-note-panel -->
+            </aside><!-- /左侧列 -->
+
+            <div id="present-column">
+            <div id="present-toolbar">
+
+                <!-- 计时器悬浮条（顶部居中，sticky） -->
+                <div id="timer-widget">
+                    <div style="display:inline-flex;align-items:center;gap:10px;background:rgba(240,249,255,0.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid #bae6fd;border-top:none;border-radius:0 0 18px 18px;padding:7px 18px 9px 14px;box-shadow:0 6px 24px rgba(99,102,241,0.10);pointer-events:all;position:relative;overflow:hidden;">
+                        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#6366f1,#818cf8);"></div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <span style="font-size:0.68rem;font-weight:700;color:#3730a3;text-transform:uppercase;letter-spacing:0.08em;white-space:nowrap;">演讲计时器</span>
+                        <div id="timer-setup" style="display:flex;align-items:center;gap:6px;">
+                            <input id="timer-minutes-input" aria-label="计时分钟数" type="number" min="1" max="180" value="5"
+                                   style="width:44px;text-align:center;border:1px solid #c7d2fe;border-radius:8px;padding:4px 3px;font-size:0.8rem;font-weight:700;color:#3730a3;background:#fff;outline:none;"
+                                   onchange="timerUpdateSetup()" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#c7d2fe'">
+                            <span style="font-size:0.68rem;color:#818cf8;font-weight:600;">分钟</span>
+                            <button onclick="timerToggle()" id="timer-start-btn"
+                                    style="padding:4px 14px;border-radius:99px;background:#ede9fe;color:#4f46e5;font-size:0.68rem;font-weight:700;border:1px solid #c4b5fd;cursor:pointer;transition:all 0.15s;letter-spacing:0.03em;white-space:nowrap;"
+                                    onmouseover="this.style.background='#ddd6fe'" onmouseout="this.style.background='#ede9fe'">开始</button>
+                        </div>
+                        <div id="timer-running-panel" style="display:none;align-items:center;gap:10px;">
+                            <div id="timer-display" style="font-variant-numeric:tabular-nums;letter-spacing:0.05em;font-size:1.45rem;font-weight:800;line-height:1;color:#1e293b;min-width:4.2ch;text-align:center;">05:00</div>
+                            <div id="timer-progress-track" style="width:72px;height:4px;background:#e0e7ff;border-radius:4px;overflow:hidden;flex-shrink:0;">
+                                <div id="timer-progress-fill" style="height:100%;border-radius:4px;background:#6366f1;width:100%;transition:width 1s linear,background 0.4s;"></div>
+                            </div>
+                            <button onclick="timerToggle()" id="timer-pause-btn"
+                                    style="padding:4px 14px;border-radius:99px;background:#e0e7ff;color:#4338ca;font-size:0.68rem;font-weight:700;border:none;cursor:pointer;transition:all 0.15s;letter-spacing:0.03em;white-space:nowrap;"
+                                    onmouseover="this.style.background='#c7d2fe'" onmouseout="this.style.background='#e0e7ff'">暂停</button>
+                        </div>
+                        <button id="timer-reset-btn" onclick="timerReset()" title="重置" style="background:none;border:none;cursor:pointer;color:#a5b4fc;padding:2px;border-radius:6px;display:flex;align-items:center;transition:color 0.15s;" onmouseover="this.style.color='#6366f1'" onmouseout="this.style.color='#a5b4fc'">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <button id="follow-current-btn" onclick="resumePrompterFollow()" disabled>正在跟随当前词</button>
+                <button id="toolbar-mic-btn" onclick="toggleListening()" aria-pressed="false" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg><span>开始追踪</span></button>
+                <div id="highlight-toolbar">
+                    <span class="hl-dot"></span>
+                    <span>标记模式已开启 · 单击词语涂抹/取消高光</span>
+                    <button onclick="toggleHighlightMode()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;cursor:pointer;padding:2px 10px;border-radius:99px;font-size:0.7rem;font-weight:700;">退出</button>
+                </div>
+            </div>
+            <div id="present-scroll-container" class="flex-1 overflow-y-auto custom-scrollbar relative" tabindex="0" aria-label="提词正文">
+                <div class="max-w-4xl mx-auto px-6 py-12 md:py-24 pb-[60vh]">
+                    <div id="prompter-content" class="text-3xl md:text-5xl lg:text-[3.5rem] font-semibold text-slate-300 leading-tight">
+                        </div>
+                </div>
+            </div>
+            </div><!-- /present-column -->
+
+            <aside id="console-column" class="present-sidebar" aria-label="控制台">
+            <button id="console-expand-btn" class="sidebar-restore" onclick="toggleSidebar('console')" aria-label="展开控制台" title="展开控制台" aria-controls="present-console" aria-expanded="false" hidden>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg><span>控制台</span>
+            </button>
+            <div id="present-console" class="bg-white/80 backdrop-blur-xl border-l border-slate-200 shadow-glass flex flex-col p-6 space-y-8 z-40 overflow-y-auto custom-scrollbar">
+                
+                <div>
+                    <div class="console-heading"><h3 class="text-lg font-extrabold text-slate-800 tracking-tight">控制台</h3><button id="console-collapse-btn" class="sidebar-collapse" onclick="toggleSidebar('console')" aria-label="收起控制台" title="收起控制台" aria-controls="present-console" aria-expanded="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></button></div>
+                    <div id="console-actions" class="flex flex-col space-y-3">
+                        <button id="btn-mic" onclick="toggleListening()" class="flex items-center justify-center space-x-2 px-6 py-4 rounded-xl font-bold text-white transition-all shadow-md bg-indigo-600 hover:bg-indigo-700 active:scale-95 w-full">
+                            <span id="mic-icon-container">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                            </span>
+                            <span id="mic-text" class="tracking-wide">开始追踪</span>
+                        </button>
+                        <button onclick="resetTracker()" class="flex items-center justify-center space-x-2 p-3.5 rounded-xl bg-slate-100 text-slate-600 font-semibold hover:bg-slate-200 hover:text-slate-900 transition-colors active:scale-95 w-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                            <span>重置到开头</span>
+                        </button>
+                        <button onclick="togglePiP()" id="pip-sidebar-btn" class="flex items-center justify-center space-x-2 p-3.5 rounded-xl bg-slate-100 text-slate-600 font-semibold hover:bg-indigo-50 hover:text-indigo-600 transition-colors active:scale-95 w-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><rect x="12" y="10" width="8" height="6" rx="1" fill="currentColor" stroke="none"/></svg>
+                            <span>画中画悬浮</span>
+                        </button>
+                    </div>
+                    <p id="tracking-status" role="status">点击开始追踪；也可点击正文校准位置。</p>
+                </div>
+
+                <div class="flex flex-col space-y-3">
+                    <div class="text-sm font-semibold text-slate-600 flex items-center space-x-2">
+                        <svg class="text-slate-400" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6"/></svg>
+                        <span>麦克风电平</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden flex-shrink-0 shadow-inner">
+                        <div id="volume-bar-inner" class="h-full w-0 bg-emerald-500 transition-all duration-75"></div>
+                    </div>
+                </div>
+
+                <!-- 同声转录面板 -->
+                <div class="flex flex-col space-y-2">
+                    <div class="text-sm font-semibold text-slate-600 flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <svg class="text-slate-400" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            <span>同声转录</span>
+                        </div>
+                        <button onclick="clearTranscript()" title="清空转录" class="text-slate-300 hover:text-slate-500 transition-colors text-xs font-medium">清空</button>
+                    </div>
+                    <div id="transcript-wrapper">
+                        <div id="transcript-box"
+                             class="min-h-[90px] max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-sm leading-relaxed"
+                             style="scroll-behavior:auto;">
+                            <p id="transcript-placeholder" class="text-slate-300 select-none text-center mt-2 text-xs">开启追踪后，识别文字将在此实时显示</p>
+                            <div id="transcript-confirmed" class="text-slate-400 font-medium break-words whitespace-pre-wrap"></div>
+                            <span id="transcript-interim" class="text-indigo-500 font-semibold italic break-words"></span>
+                            <span id="transcript-cursor" class="hidden ml-0.5 inline-block w-0.5 h-4 bg-indigo-400 align-middle animate-pulse"></span>
+                        </div>
+                        <button id="transcript-jump-btn" onclick="transcriptJumpToBottom()">↓ 跳到最新</button>
+                    </div>
+                </div>
+
+                <!-- 高光标记 -->
+                <div class="flex flex-col gap-2">
+                    <div class="text-sm font-semibold text-slate-600 flex items-center space-x-2">
+                        <svg class="text-slate-400" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                        <span>重点标记</span>
+                    </div>
+                    <button id="highlight-toggle-btn" onclick="toggleHighlightMode()"
+                            class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 bg-white hover:border-red-300 hover:bg-red-50 text-slate-500 hover:text-red-600 text-xs font-bold transition-all active:scale-95">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M20.707 5.826l-2.533-2.533a1 1 0 0 0-1.414 0l-3.172 3.172-1.414-1.414-1.414 1.414 1.413 1.412-6.6 6.6A2 2 0 0 0 5 16v3h3a2 2 0 0 0 1.42-.59l6.6-6.6 1.412 1.412 1.414-1.414-1.414-1.414 3.172-3.172a1 1 0 0 0 0-1.396z"/></svg>
+                        <span id="highlight-btn-label">进入标记模式</span>
+                    </button>
+                    <p class="text-xs text-slate-400 leading-relaxed">进入后单击词语涂抹/取消红色高光，再次点击按钮退出。</p>
+                </div>
+
+                <div class="flex flex-col space-y-4 bg-slate-50/80 p-5 rounded-2xl border border-slate-100">
+                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">快捷操作</span>
+                    
+                    <div class="flex items-start space-x-3 text-sm text-slate-600">
+                        <kbd class="font-sans border border-slate-300 rounded-md px-2 py-0.5 bg-white shadow-sm text-slate-700 font-bold tracking-wide mt-0.5 flex-shrink-0">左键</kbd>
+                        <span class="leading-relaxed">普通模式：点击单词跳转进度。</span>
+                    </div>
+                    
+                    <div class="flex items-start space-x-3 text-sm text-slate-600">
+                        <kbd class="font-sans border border-slate-300 rounded-md px-2 py-0.5 bg-white shadow-sm text-indigo-600 font-bold tracking-wide mt-0.5 flex-shrink-0">右键</kbd>
+                        <span class="leading-relaxed">右键点击任意生僻词，为其添加拼读注释。</span>
+                    </div>
+                </div>
+
+            </div>
+            </aside><!-- /console-column -->
+        </div>
+    </main>
+
+    <div id="note-modal" class="hidden fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center backdrop-blur-sm transition-opacity duration-300">
+        <div class="bg-white rounded-3xl p-8 w-11/12 max-w-md shadow-2xl modal-enter border border-white">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-slate-800">单词批注</h3>
+                <button onclick="closeNoteModal()" class="text-slate-400 hover:text-slate-700 transition-colors p-1 bg-slate-50 rounded-full hover:bg-slate-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
+                </button>
+            </div>
+            
+            <div class="text-center mb-6">
+                <p class="text-sm text-slate-500 mb-2 font-medium">您正在为以下单词添加注释</p>
+                <span id="note-word-display" class="font-sans text-4xl font-extrabold text-indigo-600 bg-indigo-50/50 border border-indigo-100 px-6 py-3 rounded-2xl inline-block shadow-sm"></span>
+            </div>
+            
+            <div class="relative">
+                <input type="text" id="note-input" class="w-full border-2 border-slate-200 rounded-2xl p-4 mb-8 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-lg font-medium text-slate-800 transition-all placeholder-slate-400" placeholder="例如: /prəˌnʌn/ 或 中文释义" onkeypress="handleNoteEnter(event)">
+                <div class="absolute right-4 top-4 text-slate-300 hidden md:block">
+                    <kbd class="font-sans text-xs border border-slate-200 rounded px-2 py-1 bg-slate-50">Enter ↵</kbd>
+                </div>
+            </div>
+
+            <div class="flex justify-end space-x-3">
+                <button onclick="closeNoteModal()" class="px-6 py-3 text-slate-600 bg-slate-100 hover:bg-slate-200 font-semibold rounded-xl transition-colors">取消</button>
+                <button onclick="saveNote()" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition-all active:scale-95">保存批注</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+/** 核心状态 */
+let scripts = [];
+try {
+    const saved = JSON.parse(localStorage.getItem('vocalflow_scripts_pro') || '[]');
+    if (Array.isArray(saved)) scripts = saved.filter(s => s && typeof s.id === 'string' && typeof s.content === 'string');
+} catch (error) { console.warn('无法读取本地稿件', error); }
+let currentScriptId = null;
+let currentView = 'home'; 
+
+// Only explicit choices persist; untouched panels adapt to the viewport.
+let _sidebarPreferences = {};
+try {
+    const saved = JSON.parse(localStorage.getItem('vocalflow_panels_pro') || '{}');
+    for (const panel of ['notes', 'console']) {
+        if (typeof saved?.[panel] === 'boolean') _sidebarPreferences[panel] = saved[panel];
+    }
+} catch (error) { console.warn('无法读取面板设置', error); }
+
+function applySidebarLayout(reposition = true) {
+    for (const [name, columnId, panelId] of [
+        ['notes', 'sticky-note-column', 'sticky-note-panel'],
+        ['console', 'console-column', 'present-console']
+    ]) {
+        const collapsed = _sidebarPreferences[name] ?? (name === 'notes' && window.innerWidth <= 1199);
+        document.getElementById(columnId).classList.toggle('is-collapsed', collapsed);
+        document.getElementById(panelId).hidden = collapsed;
+        document.getElementById(name + '-expand-btn').hidden = !collapsed;
+        for (const action of ['expand', 'collapse']) {
+            document.getElementById(name + '-' + action + '-btn').setAttribute('aria-expanded', String(!collapsed));
+        }
+        if (name === 'console') document.getElementById('toolbar-mic-btn').hidden = !collapsed;
+    }
+    if (reposition && currentView === 'present' && _prompterFollowing) {
+        requestAnimationFrame(() => _scheduleScroll(wordElCache.get(currentWordIndex), true));
+    }
+}
+
+function toggleSidebar(name) {
+    if (!['notes', 'console'].includes(name)) return;
+    const column = document.getElementById(name === 'notes' ? 'sticky-note-column' : 'console-column');
+    const collapsed = !column.classList.contains('is-collapsed');
+    _sidebarPreferences[name] = collapsed;
+    try { localStorage.setItem('vocalflow_panels_pro', JSON.stringify(_sidebarPreferences)); }
+    catch (error) { console.warn('无法保存面板设置', error); }
+    applySidebarLayout();
+    document.getElementById(name + (collapsed ? '-expand-btn' : '-collapse-btn')).focus({ preventScroll: true });
+}
+
+// Bug 5 修复：Intl.Segmenter 降级 polyfill（Firefox 旧版等不支持时使用空格分词）
+if (typeof Intl.Segmenter === 'undefined') {
+    Intl.Segmenter = class {
+        constructor() {}
+        segment(text) {
+            const words = text.match(/[\u3400-\u9fff]|[\p{L}\p{N}]+(?:['’][\p{L}]+)*|[^\p{L}\p{N}]/gu) || [];
+            let offset = 0;
+            return {
+                [Symbol.iterator]() {
+                    let idx = 0;
+                    return {
+                        next() {
+                            if (idx >= words.length) return { done: true };
+                            const segment = words[idx++];
+                            return { done: false, value: { segment, isWordLike: /[\p{L}\p{N}]/u.test(segment), index: offset++ } };
+                        }
+                    };
+                }
+            };
+        }
+    };
+}
+
+// 双重引擎控制流
+let isEngineRunning = false;   // 物理语音引擎状态 (后台常驻)
+let isEngineStarting = false;  // 引擎启动中（防竞态）
+let isUserTracking = false;    // 逻辑判定门闸 (控制台开关)
+
+let currentWordIndex = 0;      // 视觉进度指针 (逐词高亮层)
+let targetWordIndex = 0;       // 大脑目标指针 (实际识别层)
+let isCatchingUp = false;      // 追赶动画锁
+let animationTimer = null;     // 追赶动画计时器
+
+let parsedData = [];
+let wordTokens = [];
+let wordElCache = new Map();   // globalIndex → DOM element 缓存，避免反复 querySelector
+let sentenceElCache = new Map(); // sentenceIndex → DOM element 缓存
+let matchUnits = [];           // 中文按字匹配，英文按词匹配；显示仍保留原词
+let _matchUnitPositions = new Map();
+let matchUnitCursor = 0;
+let _lastRenderedWord = -1;
+let _lastRenderedSentence = -1;
+let _segmenterCache = null;    // Intl.Segmenter 实例缓存
+let _segmenterLang = null;
+let recognition = null;
+let saveTimeout = null;
+let currentEditingNoteIndex = null;
+
+let audioContext = null;
+let analyser = null;
+let microphone = null;
+let visualizerReqId = null;
+let _audioStream = null;
+let _audioGeneration = 0;
+let _audioRequestPending = false;
+let _engineRestarting = false;  // 提升为模块级变量，供 toggleListening 重置
+let _engineRestartTimer = null;
+let _engineStartTimer = null;
+let _engineFailures = 0;
+let _speechResultStates = new Map();
+let _transcriptBase = '';
+let _sessionConfirmed = '';
+let _sessionInterim = '';
+
+// 同声转录状态
+let _transcriptConfirmed = "";
+let _transcriptInterim   = "";
+
+function clearTranscript() {
+    _transcriptConfirmed = "";
+    _transcriptInterim   = "";
+    _transcriptBase = '';
+    _sessionConfirmed = '';
+    _sessionInterim = '';
+    _transcriptUserScrolled = false;
+    // 清空当前会话的展示缓存；后续旧 final 段不重新出现。
+    _speechResultStates.forEach(state => { state.display = ''; });
+    transcriptJumpToBottom();
+    updateTranscriptUI();
+}
+
+
+function init() {
+    if (scripts.length === 0) {
+        scripts.push({
+            id: Date.now().toString(),
+            title: "Steve Jobs - Stanford Commencement",
+            content: "I am honored to be with you today at your commencement from one of the finest universities in the world.\nI never graduated from college.\nTruth be told, this is the closest I've ever gotten to a college graduation.\nToday I want to tell you three stories from my life.",
+            language: "en-US",
+            annotations: {
+                "2": "感到荣幸的",
+                "10": "毕业典礼",
+                "16": "最好的",
+                "22": "毕业",
+                "30": "老实说 /təʊld/"
+            },
+            updatedAt: Date.now()
+        });
+        saveScriptsToLocal();
+    }
+    navigate('home');
+    
+    // Bug 1 修复：安全绑定事件，防止元素不存在时崩溃
+    const editContent = document.getElementById('edit-content');
+    const editTitle   = document.getElementById('edit-title');
+    const editLang    = document.getElementById('edit-lang');
+    if (editContent) editContent.addEventListener('input', scheduleSave);
+    if (editTitle)   editTitle.addEventListener('input', scheduleSave);
+    if (editLang)    editLang.addEventListener('change', scheduleSave);
+}
+
+function saveScriptsToLocal() {
+    try {
+        localStorage.setItem('vocalflow_scripts_pro', JSON.stringify(scripts));
+        return true;
+    } catch (error) {
+        showError('本地保存失败，请保留当前页面并备份稿件，或检查浏览器存储空间。');
+        return false;
+    }
+}
+
+function navigate(view, scriptId = null) {
+    const header = document.getElementById('main-header');
+    if (currentView === 'edit') flushEditorSave();
+    
+    if (currentView === 'present' && view !== 'present') {
+        stopEngineCompletely();
+        stopAudioVisualizer();
+        if (_catchUpRafId) { cancelAnimationFrame(_catchUpRafId); _catchUpRafId = null; }
+        clearTimeout(animationTimer);
+        if (_highlightMode) toggleHighlightMode();
+        timerPause();
+        _cancelPrompterScroll();
+        if (isMiniMode) hideMiniWindow();
+        if (pipWindow && !pipWindow.closed) pipWindow.close();
+    }
+    
+    document.querySelectorAll('.view').forEach(el => el.classList.add('hidden'));
+    
+    currentView = view;
+    document.getElementById(`view-${view}`).classList.remove('hidden');
+
+    const headerActions = document.getElementById('header-actions');
+    if (view === 'home') {
+        header.classList.remove('-translate-y-full');
+        currentScriptId = null;
+        renderHome();
+        headerActions.innerHTML = ''; 
+    } else if (view === 'edit') {
+        header.classList.remove('-translate-y-full');
+        currentScriptId = scriptId;
+        renderEdit();
+        headerActions.innerHTML = `<button onclick="navigate('home')" class="px-5 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-semibold transition-colors">返回列表</button>`;
+    } else if (view === 'present') {
+        header.classList.add('bg-white/50');
+        headerActions.innerHTML = `<button onclick="navigate('edit', '${currentScriptId}')" class="px-5 py-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 rounded-xl font-semibold transition-colors flex items-center space-x-1"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg><span>编辑内容</span></button>`;
+    }
+}
+
+// ================= 音量检测核心逻辑 =================
+async function microphonePermissionState() {
+    try {
+        if (!navigator.permissions?.query) return 'unknown';
+        return (await navigator.permissions.query({ name: 'microphone' })).state;
+    } catch (error) { return 'unknown'; }
+}
+
+async function startAudioVisualizer() {
+    if (_audioStream || _audioRequestPending || !isUserTracking) return;
+    _audioRequestPending = true;
+    const generation = ++_audioGeneration;
+    try {
+        // 音量条是辅助功能，不能单独触发第二次麦克风授权。
+        const permission = await microphonePermissionState();
+        if (permission !== 'granted' || generation !== _audioGeneration || !isUserTracking) return;
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        if (generation !== _audioGeneration || !isUserTracking || currentView !== 'present') {
+            stream.getTracks().forEach(track => track.stop());
+            return;
+        }
+        _audioStream = stream;
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        microphone = audioContext.createMediaStreamSource(stream);
+        
+        microphone.connect(analyser);
+        analyser.fftSize = 256;
+        
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        const volumeBarInner = document.getElementById('volume-bar-inner');
+
+        function drawVisualizer() {
+            if (!audioContext) return;
+            visualizerReqId = requestAnimationFrame(drawVisualizer);
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for(let i = 0; i < bufferLength; i++) sum += dataArray[i];
+            let percent = Math.min(100, ((sum / bufferLength) / 64) * 100); 
+            
+            if (volumeBarInner) {
+                volumeBarInner.style.width = percent + '%';
+                if (percent > 85) volumeBarInner.style.backgroundColor = '#ef4444';
+                else if (percent > 50) volumeBarInner.style.backgroundColor = '#eab308';
+                else volumeBarInner.style.backgroundColor = '#10b981';
+            }
+        }
+        drawVisualizer();
+        if (audioContext.state === 'suspended') audioContext.resume();
+    } catch (err) {
+        console.warn("无法启动麦克风可视化检测:", err);
+    } finally {
+        _audioRequestPending = false;
+    }
+}
+
+function stopAudioVisualizer() {
+    _audioGeneration++;
+    if (visualizerReqId) cancelAnimationFrame(visualizerReqId);
+    visualizerReqId = null;
+    if (_audioStream) _audioStream.getTracks().forEach(track => track.stop());
+    _audioStream = null;
+    if (audioContext) {
+        audioContext.close().catch(() => {});
+        audioContext = null;
+    }
+    const volumeBarInner = document.getElementById('volume-bar-inner');
+    if (volumeBarInner) volumeBarInner.style.width = '0%';
+}
+// ==============================================
+
+// Bug 6 修复：HTML 转义工具函数，防止 XSS 注入
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderHome() {
+    const grid = document.getElementById('scripts-grid');
+    grid.innerHTML = '';
+    
+    [...scripts].sort((a, b) => b.updatedAt - a.updatedAt).forEach(script => {
+        const card = document.createElement('div');
+        card.className = "bg-white p-6 rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-slate-100 cursor-pointer flex flex-col h-56 relative group";
+        card.innerHTML = `
+            <div class="flex justify-between items-start mb-3" onclick="navigate('edit', '${script.id}')">
+                <h3 class="text-xl font-bold text-slate-800 line-clamp-2 leading-tight">${escapeHtml(script.title) || '未命名演讲稿'}</h3>
+            </div>
+            <p class="text-slate-500 text-sm flex-1 overflow-hidden leading-relaxed" onclick="navigate('edit', '${script.id}')">${escapeHtml(script.content.substring(0, 80))}...</p>
+            <div class="mt-4 flex justify-between items-center pt-4 border-t border-slate-50">
+                <span class="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-semibold tracking-wide">${script.language === 'en-US' ? 'EN-US' : 'ZH-CN'}</span>
+                <span class="text-xs text-slate-400 font-medium">${new Date(script.updatedAt).toLocaleDateString()}</span>
+            </div>
+            <button onclick="deleteScript('${script.id}', event)" class="absolute top-4 right-4 bg-white/80 backdrop-blur text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all p-2 rounded-full shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            </button>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+function createNewScript() {
+    const newId = Date.now().toString();
+    scripts.push({ id: newId, title: "", content: "", language: "en-US", annotations: {}, updatedAt: Date.now() });
+    saveScriptsToLocal();
+    navigate('edit', newId);
+}
+
+function deleteScript(id, event) {
+    event.stopPropagation();
+    if (confirm('确定要移至废纸篓吗？此操作不可恢复。')) {
+        scripts = scripts.filter(s => s.id !== id);
+        saveScriptsToLocal();
+        renderHome();
+    }
+}
+
+function renderEdit() {
+    const script = scripts.find(s => s.id === currentScriptId);
+    if (!script) return navigate('home');
+    document.getElementById('edit-title').value = script.title;
+    document.getElementById('edit-content').value = script.content;
+    document.getElementById('edit-lang').value = script.language || 'en-US';
+    
+    const timeString = new Date(script.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    document.getElementById('save-status').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" class="mr-1 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>上次保存 ${timeString}</span>`;
+}
+
+function flushEditorSave() {
+    clearTimeout(saveTimeout);
+    saveTimeout = null;
+    if (currentView !== 'edit') return;
+    const script = scripts.find(s => s.id === currentScriptId);
+    if (!script) return;
+    script.title = document.getElementById('edit-title').value;
+    script.content = document.getElementById('edit-content').value;
+    script.language = document.getElementById('edit-lang').value;
+    script.updatedAt = Date.now();
+    const saved = saveScriptsToLocal();
+    document.getElementById('save-status').textContent = saved ? '已保存至本地' : '保存失败，请备份稿件';
+}
+
+function scheduleSave() {
+    document.getElementById('save-status').innerHTML = `<svg class="animate-spin mr-1 text-indigo-500" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span>保存中...</span>`;
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(flushEditorSave, 400);
+}
+
+function startPresentation() { 
+    flushEditorSave();
+    const script = scripts.find(s => s.id === currentScriptId);
+    if (!script || !/[\p{L}\p{N}]/u.test(script.content)) {
+        showError('请先输入演讲内容，再进入提词模式。');
+        return;
+    }
+    hideError();
+    navigate('present');
+    renderPresent();
+}
+
+function renderPresent() {
+    const script = scripts.find(s => s.id === currentScriptId);
+    if (!script) return;
+    if (!script.annotations) script.annotations = {};
+
+    const text = script.content;
+    const lang = script.language;
+    
+    const rawSentences = text.split(/(?<=[.?!。？！\n])\s*/).filter(s => /[\p{L}\p{N}]/u.test(s));
+    const segmenter = new Intl.Segmenter(lang, { granularity: 'word' });
+    
+    parsedData = [];
+    wordTokens = [];
+    wordElCache = new Map();
+    sentenceElCache = new Map();
+    matchUnits = [];
+    _matchUnitPositions = new Map();
+    _lastRenderedWord = -1;
+    _lastRenderedSentence = -1;
+    let globalIndex = 0;
+
+    const container = document.getElementById('prompter-content');
+    container.innerHTML = '';
+
+    rawSentences.forEach((sentenceText, sIndex) => {
+        const segments = Array.from(segmenter.segment(sentenceText));
+        
+        const sentenceSpan = document.createElement('div');
+        sentenceSpan.className = 'sentence-block sentence-future';
+        sentenceSpan.id = `sentence-${sIndex}`;
+        
+        let wordsInSentence = [];
+        
+        segments.forEach(segment => {
+            if (segment.isWordLike) {
+                const wordObj = {
+                    text: segment.segment,
+                    globalIndex: globalIndex,
+                    sentenceIndex: sIndex,
+                    unitStart: matchUnits.length,
+                    cleanText: normalizeSpeechText(segment.segment)
+                };
+                for (const unit of speechUnits(segment.segment, lang)) {
+                    if (!_matchUnitPositions.has(unit)) _matchUnitPositions.set(unit, []);
+                    _matchUnitPositions.get(unit).push(matchUnits.length);
+                    matchUnits.push({ text: unit, wordIndex: globalIndex });
+                }
+                wordObj.unitEnd = matchUnits.length;
+                wordsInSentence.push(wordObj);
+                wordTokens.push(wordObj);
+                
+                const wordSpan = document.createElement('span');
+                wordSpan.className = 'word-token word-future';
+                wordSpan.dataset.globalIndex = globalIndex;
+                
+                const noteText = script.annotations[globalIndex] || '';
+                
+                wordSpan.innerHTML = `
+                    <span class="word-text">${escapeHtml(wordObj.text)}</span>
+                    <span class="word-note" id="note-${globalIndex}">${escapeHtml(noteText)}</span>
+                `;
+
+                wordSpan.onclick = (e) => {
+                    if (_handleHighlightClick(wordObj.globalIndex, wordSpan)) return;
+                    jumpToWord(wordObj.globalIndex);
+                };
+                wordSpan.oncontextmenu = (e) => {
+                    e.preventDefault(); 
+                    openNoteModal(wordObj.globalIndex, wordObj.text);
+                };
+                makeDraggable(wordSpan, wordObj.text);
+                wordElCache.set(globalIndex, wordSpan);   // 缓存 DOM 引用
+
+                sentenceSpan.appendChild(wordSpan);
+                globalIndex++;
+            } else {
+                if (!segment.segment.trim()) return;
+                const puncSpan = document.createElement('span');
+                puncSpan.className = 'inline-flex flex-col items-center justify-start px-0.5 mx-0.5 cursor-default transition-colors duration-300';
+                puncSpan.style.color = 'inherit';
+                puncSpan.innerHTML = `
+                    <span class="word-text">${escapeHtml(segment.segment)}</span>
+                    <span class="word-note"></span>
+                `;
+                sentenceSpan.appendChild(puncSpan);
+            }
+        });
+
+        parsedData.push({ sentenceIndex: sIndex, words: wordsInSentence });
+        sentenceElCache.set(sIndex, sentenceSpan);   // 缓存句子 DOM 引用
+        container.appendChild(sentenceSpan);
+    });
+
+    currentWordIndex = 0;
+    targetWordIndex = 0;
+    matchUnitCursor = 0;
+    _speechResultStates.clear();
+    clearTranscript();
+    isCatchingUp = false;
+    isUserTracking = false; 
+    clearTimeout(animationTimer);
+    
+    applySidebarLayout(false);
+    updatePrompterUI(true); 
+    updateMicUI();
+    initStickyNote();
+    _applyHighlightsToDOM();
+    initTranscriptScroll();
+    _transcriptUserScrolled = false;
+    initPrompterScroll();
+    _prompterFollowing = true;
+    _updateFollowButton();
+    timerReset();
+}
+
+function openNoteModal(index, wordText) {
+    currentEditingNoteIndex = index;
+    const script = scripts.find(s => s.id === currentScriptId);
+    const currentNote = script.annotations[index] || "";
+    
+    document.getElementById('note-word-display').innerText = wordText;
+    const inputEl = document.getElementById('note-input');
+    inputEl.value = currentNote;
+    
+    const modal = document.getElementById('note-modal');
+    modal.classList.remove('hidden');
+    
+    setTimeout(() => inputEl.focus(), 100);
+}
+
+function closeNoteModal() {
+    const modal = document.getElementById('note-modal');
+    modal.style.opacity = '0';
+    setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.style.opacity = '';
+        currentEditingNoteIndex = null;
+    }, 300);
+}
+
+function handleNoteEnter(e) { if (e.key === 'Enter') saveNote(); }
+
+function saveNote() {
+    if (currentEditingNoteIndex === null) return;
+    const index = currentEditingNoteIndex;
+    const newNote = document.getElementById('note-input').value.trim();
+    const script = scripts.find(s => s.id === currentScriptId);
+    
+    if (newNote === "") delete script.annotations[index];
+    else script.annotations[index] = newNote;
+    
+    saveScriptsToLocal();
+    const noteEl = document.getElementById(`note-${index}`);
+    if (noteEl) noteEl.innerText = newNote;
+    closeNoteModal();
+}
+
+
+let _scrollRafId = null;
+let _scrollTarget = null;
+let _scrollLastTime = 0;
+let _prompterFollowing = true;
+let _catchUpRafId = null;
+
+function _cancelPrompterScroll() {
+    if (_scrollRafId) cancelAnimationFrame(_scrollRafId);
+    _scrollRafId = null;
+    _scrollTarget = null;
+    _scrollLastTime = 0;
+}
+
+function _updateFollowButton() {
+    const btn = document.getElementById('follow-current-btn');
+    if (!btn) return;
+    btn.disabled = _prompterFollowing;
+    btn.textContent = _prompterFollowing ? '正在跟随当前词' : '回到当前词';
+}
+
+function initPrompterScroll() {
+    const container = document.getElementById('present-scroll-container');
+    if (container.dataset.followBound) return;
+    container.dataset.followBound = 'true';
+    const pauseFollow = () => {
+        _prompterFollowing = false;
+        _cancelPrompterScroll();
+        _updateFollowButton();
+    };
+    container.addEventListener('wheel', pauseFollow, { passive: true });
+    container.addEventListener('touchstart', pauseFollow, { passive: true });
+    container.addEventListener('pointerdown', e => {
+        if (e.clientX >= container.getBoundingClientRect().right - 14) pauseFollow();
+    });
+    container.addEventListener('keydown', e => {
+        if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) pauseFollow();
+    });
+}
+
+function resumePrompterFollow() {
+    _prompterFollowing = true;
+    _updateFollowButton();
+    _scheduleScroll(wordElCache.get(currentWordIndex), true);
+}
+
+function _scheduleScroll(el, force = false) {
+    const container = document.getElementById('present-scroll-container');
+    if (!el || !_prompterFollowing || currentView !== 'present') return;
+    const rect = el.getBoundingClientRect();
+    const bounds = container.getBoundingClientRect();
+    const top = rect.top - bounds.top;
+    const safeTop = Math.min(70, bounds.height * .18);
+    const safeBottom = bounds.height * .68;
+    if (!force && top >= safeTop && top + rect.height <= safeBottom) return;
+    const desired = container.scrollTop + top - bounds.height * .32;
+    _scrollTarget = Math.max(0, Math.min(desired, container.scrollHeight - container.clientHeight));
+    // 大幅追赶时先保证当前词可见，避免滚动动画继续落后于语音。
+    if (top >= bounds.height || top + rect.height <= 0 || Math.abs(_scrollTarget - container.scrollTop) > bounds.height * .75 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        container.scrollTop = _scrollTarget;
+        _cancelPrompterScroll();
+        return;
+    }
+    if (_scrollRafId) return;
+    const animate = time => {
+        if (!_prompterFollowing || currentView !== 'present' || _scrollTarget === null) {
+            _cancelPrompterScroll(); return;
+        }
+        const delta = _scrollTarget - container.scrollTop;
+        const dt = _scrollLastTime ? Math.min(50, time - _scrollLastTime) : 16;
+        _scrollLastTime = time;
+        if (Math.abs(delta) < 2) {
+            container.scrollTop = _scrollTarget;
+            _cancelPrompterScroll(); return;
+        }
+        container.scrollTop += delta * (1 - Math.exp(-dt / 75));
+        _scrollRafId = requestAnimationFrame(animate);
+    };
+    _scrollRafId = requestAnimationFrame(animate);
+}
+
+function updatePrompterUI(forceScrollToTop = false) {
+    const activeSentence = wordTokens[currentWordIndex]?.sentenceIndex ?? -1;
+    // Only touch words crossed by the pointer; highlights and annotations stay intact.
+    const first = _lastRenderedWord < 0 ? 0 : Math.min(_lastRenderedWord, currentWordIndex);
+    const last = _lastRenderedWord < 0 ? wordTokens.length - 1 : Math.max(_lastRenderedWord, currentWordIndex);
+    for (let index = first; index <= last; index++) {
+        const el = wordElCache.get(index);
+        if (!el) continue;
+        el.classList.remove('word-past', 'word-active', 'word-future');
+        el.classList.add(index < currentWordIndex ? 'word-past' : index === currentWordIndex ? 'word-active' : 'word-future');
+    }
+    const firstSentence = _lastRenderedSentence < 0 ? 0 : Math.min(_lastRenderedSentence, activeSentence);
+    const lastSentence = _lastRenderedSentence < 0 ? parsedData.length - 1 : Math.max(_lastRenderedSentence, activeSentence);
+    for (let si = firstSentence; si <= lastSentence; si++) {
+        const el = sentenceElCache.get(si);
+        if (el) el.className = 'sentence-block ' + (si < activeSentence ? 'sentence-past' : si === activeSentence ? 'sentence-active' : 'sentence-future');
+    }
+    _lastRenderedWord = currentWordIndex;
+    _lastRenderedSentence = activeSentence;
+    if (forceScrollToTop) {
+        _cancelPrompterScroll();
+        document.getElementById('present-scroll-container').scrollTop = 0;
+    } else {
+        _scheduleScroll(wordElCache.get(currentWordIndex));
+    }
+    updateTrackingStatus();
+}
+
+function catchUpHighlight() {
+    if (_catchUpRafId) return;
+    isCatchingUp = true;
+    _catchUpRafId = requestAnimationFrame(() => {
+        _catchUpRafId = null;
+        isCatchingUp = false;
+        currentWordIndex = Math.max(0, Math.min(targetWordIndex, wordTokens.length - 1));
+        updatePrompterUI();
+        updateMiniWindow();
+        if (pipWindow && !pipWindow.closed) renderPiP();
+    });
+}
+
+function jumpToWord(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= wordTokens.length) return;
+    if (_catchUpRafId) cancelAnimationFrame(_catchUpRafId);
+    _catchUpRafId = null;
+    isCatchingUp = false;
+    currentWordIndex = targetWordIndex = index;
+    matchUnitCursor = wordTokens[index].unitStart;
+    _prompterFollowing = true;
+    _cancelPrompterScroll();
+    _updateFollowButton();
+    updatePrompterUI();
+    _scheduleScroll(wordElCache.get(index), true);
+    updateMiniWindow();
+    if (pipWindow && !pipWindow.closed) { pipViewSentIdx = -1; renderPiP(); }
+    // 保留识别会话，只屏蔽校准前已听到的前缀，避免重新申请权限。
+    _speechResultStates.forEach(state => {
+        state.anchor = matchUnitCursor;
+        state.skipUnits = state.lastUnits?.length || 0;
+        state.matchedSpokenCount = 0;
+        state.matchedUnitEnd = matchUnitCursor;
+    });
+}
+
+function resetTracker() {
+    jumpToWord(0);
+    clearTranscript();
+    updatePrompterUI(true);
+}
+
+
+function levenshteinDistance(a, b) {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+            }
+        }
+    }
+    return matrix[b.length][a.length];
+}
+
+
+function normalizeSpeechText(text) {
+    return String(text).normalize('NFKC').toLowerCase().replace(/[’‘]/g, "'").replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+function speechUnits(text, lang = 'en-US') {
+    if (!_segmenterCache || _segmenterLang !== lang) {
+        _segmenterCache = new Intl.Segmenter(lang, { granularity: 'word' });
+        _segmenterLang = lang;
+    }
+    const units = [];
+    const contractions = { "i'm": ['i', 'am'], "i've": ['i', 'have'], "i'll": ['i', 'will'], "it's": ['it', 'is'], "we're": ['we', 'are'], "we've": ['we', 'have'], "don't": ['do', 'not'], "can't": ['can', 'not'], "won't": ['will', 'not'], "that's": ['that', 'is'], "you're": ['you', 'are'] };
+    for (const segment of _segmenterCache.segment(String(text).normalize('NFKC').replace(/[’‘]/g, "'"))) {
+        if (!segment.isWordLike) continue;
+        const raw = segment.segment.toLowerCase();
+        const clean = normalizeSpeechText(raw);
+        if (!clean) continue;
+        if (contractions[raw]) units.push(...contractions[raw]);
+        else units.push(...(clean.match(/[\u3400-\u9fff]|[^\u3400-\u9fff]+/gu) || []));
+    }
+    return units;
+}
+
+function isFuzzyMatch(spoken, expected) {
+    if (!spoken || !expected) return false;
+    if (spoken === expected) return true;
+    // A different Chinese character is meaningful; tolerate errors across a phrase instead.
+    if (/[\u3400-\u9fff]/u.test(spoken + expected)) return false;
+    const length = Math.max(spoken.length, expected.length);
+    if (Math.min(spoken.length, expected.length) < 4) return false;
+    if (spoken.length === expected.length) {
+        const different = [...spoken].map((char, i) => char === expected[i] ? -1 : i).filter(i => i >= 0);
+        if (different.length === 2 && different[1] === different[0] + 1 && spoken[different[0]] === expected[different[1]] && spoken[different[1]] === expected[different[0]]) return true;
+    }
+    const distance = levenshteinDistance(spoken, expected);
+    return distance <= (length >= 8 ? 2 : 1) && distance / length <= .25;
+}
+
+const _commonSpeechUnits = new Set(['的','了','我','你','他','她','它','是','在','a','an','the','is','am','are','to','and','of','in','on','it','i']);
+
+// Bounded sequence alignment handles fillers, omitted words and revised interim text.
+// Each result uses a fixed script anchor: replaying a hypothesis cannot consume repeated words again.
+function findSpeechAlignment(spoken, anchor) {
+    if (!spoken.length || !matchUnits.length || anchor >= matchUnits.length) return null;
+    const originalLength = spoken.length;
+    const exactAhead = originalLength === 1 ? (_commonSpeechUnits.has(spoken[0]) ? 0 : 1) : originalLength === 2 ? 3 : originalLength === 3 ? 8 : 24;
+    // 连读内容完整时直接定位，避免对每次增长的长段重算编辑距离。
+    for (let start = anchor; start <= anchor + exactAhead && start + originalLength <= matchUnits.length; start++) {
+        if (spoken.every((text, offset) => text === matchUnits[start + offset].text)) {
+            return { end: start + originalLength, spokenEnd: originalLength, score: 1.2 - (start - anchor) * .015 };
+        }
+    }
+    const trim = Math.max(0, spoken.length - 64);
+    spoken = spoken.slice(trim);
+    anchor = Math.min(matchUnits.length, anchor + trim);
+    const n = spoken.length;
+    const ahead = n === 1 ? (_commonSpeechUnits.has(spoken[0]) ? 0 : 1) : n === 2 ? 3 : n === 3 ? 8 : 24;
+    const script = matchUnits.slice(anchor, anchor + n + ahead + 8);
+    if (n === 1) {
+        for (let j = 0; j <= ahead && j < script.length; j++) {
+            if (spoken[0] === script[j].text) return { end: anchor + j + 1, spokenEnd: originalLength, score: 1 - j * .04 };
+        }
+        return null;
+    }
+    let previous = Array.from({ length: script.length + 1 }, (_, j) => ({ cost: j <= ahead ? j * .12 : Infinity, matched: 0, exact: 0, start: j, lastSpeech: -1, end: j }));
+    const fuzzyCache = new Map();
+    for (let i = 1; i <= n; i++) {
+        const row = [{ ...previous[0], cost: previous[0].cost + .95 }];
+        for (let j = 1; j <= script.length; j++) {
+            const exact = spoken[i - 1] === script[j - 1].text;
+            const pair = spoken[i - 1] + '\u0000' + script[j - 1].text;
+            if (!exact && !fuzzyCache.has(pair)) fuzzyCache.set(pair, isFuzzyMatch(spoken[i - 1], script[j - 1].text));
+            const fuzzy = exact || fuzzyCache.get(pair);
+            const diagonal = previous[j - 1];
+            const candidates = [
+                { ...diagonal, cost: diagonal.cost + (exact ? 0 : fuzzy ? .35 : 1.6), matched: diagonal.matched + (fuzzy ? 1 : 0), exact: diagonal.exact + (exact ? 1 : 0), lastSpeech: fuzzy ? i - 1 : diagonal.lastSpeech, end: fuzzy ? j : diagonal.end },
+                { ...previous[j], cost: previous[j].cost + .95 },
+                { ...row[j - 1], cost: row[j - 1].cost + .85 }
+            ];
+            row[j] = candidates.reduce((best, candidate) => candidate.cost < best.cost || (candidate.cost === best.cost && candidate.exact > best.exact) ? candidate : best);
+        }
+        previous = row;
+    }
+    let best = null;
+    for (const candidate of previous.slice(1)) {
+        const required = n === 2 ? 2 : Math.ceil(n * .72);
+        if (candidate.matched < required || candidate.exact < Math.min(n, Math.max(2, Math.ceil(n * .5))) || candidate.lastSpeech < n - 2) continue;
+        if (n === 2 && candidate.exact !== 2) continue;
+        const errors = candidate.cost - candidate.start * .12;
+        if (errors / n > .48) continue;
+        const score = (candidate.matched + candidate.exact * .2) / n - errors / n * .25 - candidate.start * .015;
+        if (!best || score > best.score) best = { end: anchor + candidate.end, spokenEnd: trim + candidate.lastSpeech + 1, score };
+    }
+    return best;
+}
+
+function findSpeechRecovery(spoken, state) {
+    const chinese = spoken.some(unit => /[\u3400-\u9fff]/u.test(unit));
+    if (spoken.length < (chinese ? 8 : 6)) return null;
+    const tail = spoken.slice(-12);
+    if (new Set(tail).size < 4 || tail.filter(unit => !_commonSpeechUnits.has(unit)).length < (chinese ? 4 : 3)) return null;
+    const frontier = state.matchedUnitEnd ?? state.anchor;
+    const lower = Math.max(state.anchor, frontier - tail.length);
+    const ahead = Math.max(128, Math.min(768, (spoken.length - (state.matchedSpokenCount || 0)) * 2 + 64));
+    const upper = Math.min(matchUnits.length, frontier + ahead);
+    const positions = _matchUnitPositions.get(tail[tail.length - 1]) || [];
+    let found = null;
+    for (const last of positions) {
+        if (last + 1 > upper) break;
+        const start = last - tail.length + 1;
+        if (start < lower || last + 1 <= frontier) continue;
+        if (!tail.every((text, offset) => text === matchUnits[start + offset].text)) continue;
+        // 有多个相同短语时保留原位置，等待更多语音上下文。
+        if (found) return null;
+        found = { end: last + 1, spokenEnd: spoken.length, score: 1.19 };
+    }
+    return found;
+}
+
+function findTrackedSpeechAlignment(spoken, state) {
+    const matchedCount = state.matchedSpokenCount || 0;
+    const previous = (state.lastUnits || []).slice(state.skipUnits || 0);
+    let common = 0;
+    while (common < Math.min(spoken.length, previous.length) && spoken[common] === previous[common]) common++;
+    let alignment;
+    if (matchedCount && common >= matchedCount) {
+        if (spoken.length <= matchedCount) return { end: state.matchedUnitEnd, spokenEnd: matchedCount, score: 1.2 };
+        const cut = Math.max(0, matchedCount - 8);
+        const anchor = Math.max(state.anchor, state.matchedUnitEnd - (matchedCount - cut));
+        alignment = findSpeechAlignment(spoken.slice(cut), anchor);
+        if (alignment) alignment.spokenEnd += cut;
+    } else {
+        alignment = findSpeechAlignment(spoken, state.anchor);
+    }
+    if (alignment?.spokenEnd === spoken.length && alignment.score >= 1.17) return alignment;
+    const recovery = findSpeechRecovery(spoken, state);
+    return recovery && (!alignment || recovery.end > alignment.end) ? recovery : alignment;
+}
+
+function processSpeechMatching(spokenWords, anchor = matchUnitCursor) {
+    const alignment = findSpeechAlignment(spokenWords, anchor);
+    if (alignment && alignment.end > matchUnitCursor) {
+        matchUnitCursor = alignment.end;
+        targetWordIndex = matchUnits[matchUnitCursor]?.wordIndex ?? wordTokens.length;
+        catchUpHighlight();
+    }
+    return alignment;
+}
+
+function _bestAlternative(result) {
+    if (!result?.length) return '';
+    let best = result[0];
+    for (let i = 1; i < result.length; i++) if ((result[i].confidence || 0) > (best.confidence || 0)) best = result[i];
+    return best.transcript || '';
+}
+
+function _truncateTranscript(text) {
+    return text.length > 2000 ? '…' + text.slice(-1500) : text;
+}
+
+function _finishSpeechSession() {
+    _transcriptBase = _truncateTranscript(_transcriptBase + _sessionConfirmed);
+    _sessionConfirmed = '';
+    _sessionInterim = '';
+    _transcriptConfirmed = _transcriptBase;
+    _transcriptInterim = '';
+    _speechResultStates.clear();
+    updateTranscriptUI();
+}
+
+function _detachRecognition() {
+    clearTimeout(_engineRestartTimer);
+    clearTimeout(_engineStartTimer);
+    _engineRestartTimer = _engineStartTimer = null;
+    _engineRestarting = false;
+    const engine = recognition;
+    recognition = null;
+    if (engine) {
+        engine.onstart = engine.onresult = engine.onerror = engine.onend = null;
+        try { engine.abort(); } catch (error) {}
+    }
+    isEngineRunning = isEngineStarting = false;
+}
+
+function initSpeechRecognition(lang) {
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    _finishSpeechSession();
+    _detachRecognition();
+    if (!SpeechRecognitionAPI) {
+        stopEngineCompletely();
+        showError('此浏览器未提供语音识别，请使用支持该功能的浏览器。仍可点击正文手动提词。');
+        return;
+    }
+    let engine;
+    try { engine = new SpeechRecognitionAPI(); }
+    catch (error) { stopEngineCompletely(); showError('语音引擎无法初始化，请重试。'); return; }
+    recognition = engine;
+    engine.continuous = true;
+    engine.interimResults = true;
+    engine.lang = lang;
+    engine.maxAlternatives = 3;
+    engine.onstart = () => {
+        if (recognition !== engine || !isUserTracking) return;
+        clearTimeout(_engineStartTimer);
+        isEngineRunning = true;
+        isEngineStarting = false;
+        hideError();
+        updateMicUI();
+        startAudioVisualizer();
+    };
+    engine.onresult = event => {
+        if (recognition !== engine || !isUserTracking || currentView !== 'present') return;
+        _engineFailures = 0;
+        for (let i = event.results.length; _speechResultStates.has(i); i++) _speechResultStates.delete(i);
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const state = _speechResultStates.get(i) || { anchor: matchUnitCursor, signature: '', display: '', final: false, skipUnits: 0, lastUnits: [] };
+            // Web Speech 的 final 段不可修订；迟到的旧结果不能覆盖手动校准。
+            if (state.final) continue;
+            const signature = Array.from(result, alternative => alternative.transcript || '').join('\u0000');
+            if (signature !== state.signature) {
+                let selected = _bestAlternative(result);
+                let selectedAlignment = null;
+                let selectedScore = -Infinity;
+                for (let a = 0; a < result.length; a++) {
+                    const transcript = result[a].transcript || '';
+                    const alignment = findTrackedSpeechAlignment(speechUnits(transcript, lang).slice(state.skipUnits), state);
+                    if (!alignment) continue;
+                    const score = alignment.score + (result[a].confidence || 0) * .03;
+                    if (score > selectedScore) { selected = transcript; selectedAlignment = alignment; selectedScore = score; }
+                }
+                if (selectedAlignment && selectedAlignment.end > matchUnitCursor) {
+                    matchUnitCursor = selectedAlignment.end;
+                    targetWordIndex = matchUnits[matchUnitCursor]?.wordIndex ?? wordTokens.length;
+                    catchUpHighlight();
+                }
+                state.signature = signature;
+                state.display = selected.trim();
+                state.lastUnits = speechUnits(selected, lang);
+                if (selectedAlignment) {
+                    state.matchedSpokenCount = selectedAlignment.spokenEnd;
+                    state.matchedUnitEnd = selectedAlignment.end;
+                }
+            }
+            state.final = result.isFinal;
+            _speechResultStates.set(i, state);
+        }
+        const confirmed = [], interim = [];
+        for (const state of _speechResultStates.values()) {
+            if (state.display) (state.final ? confirmed : interim).push(state.display);
+        }
+        _sessionConfirmed = confirmed.length ? confirmed.join(' ') + ' ' : '';
+        _sessionInterim = interim.join(' ');
+        _transcriptConfirmed = _truncateTranscript(_transcriptBase + _sessionConfirmed);
+        _transcriptInterim = _sessionInterim;
+        updateTranscriptUI();
+        updateTrackingStatus();
+    };
+    engine.onerror = event => {
+        if (recognition !== engine) return;
+        const fatal = {
+            'not-allowed': '麦克风权限被拒绝，请在浏览器设置中允许访问后重试。',
+            'service-not-allowed': '浏览器未允许语音识别服务，请检查浏览器设置。',
+            'audio-capture': '未检测到可用麦克风，请检查设备连接后重试。',
+            'language-not-supported': '语音服务不支持当前语言，请更换稿件语言或浏览器。'
+        };
+        if (fatal[event.error]) { stopEngineCompletely(); showError(fatal[event.error]); }
+        else if (event.error !== 'no-speech' && event.error !== 'aborted') {
+            _engineFailures++;
+            showError('语音服务暂时中断，正在尝试重连。');
+        }
+    };
+    engine.onend = () => {
+        if (recognition !== engine) return;
+        clearTimeout(_engineStartTimer);
+        isEngineRunning = isEngineStarting = false;
+        _finishSpeechSession();
+        if (!isUserTracking || currentView !== 'present') return;
+        if (_engineFailures >= 5) {
+            stopEngineCompletely();
+            showError('语音服务连续连接失败，请检查网络后点击开始追踪重试。');
+            return;
+        }
+        _engineRestarting = true;
+        updateMicUI();
+        const delay = _engineFailures ? Math.min(4000, 300 * 2 ** _engineFailures) : 200;
+        _engineRestartTimer = setTimeout(async () => {
+            const permission = await microphonePermissionState();
+            if (recognition !== engine || !isUserTracking || currentView !== 'present') return;
+            if (permission !== 'granted') {
+                stopEngineCompletely();
+                showError('语音会话已结束。为避免重复弹出授权，请点击开始追踪继续。');
+                return;
+            }
+            // 复用同一实例；自动重连不会重复创建识别器。
+            _engineRestarting = false;
+            _startRecognitionSession(engine);
+        }, delay);
+    };
+    _startRecognitionSession(engine);
+}
+
+function _startRecognitionSession(engine) {
+    if (recognition !== engine || !isUserTracking || currentView !== 'present') return;
+    clearTimeout(_engineStartTimer);
+    clearTimeout(_engineRestartTimer);
+    _engineRestartTimer = null;
+    isEngineStarting = true;
+    updateMicUI();
+    _engineStartTimer = setTimeout(() => {
+        if (recognition !== engine || !isEngineStarting) return;
+        stopEngineCompletely();
+        showError('语音服务启动超时，请检查麦克风权限与网络后重试。');
+    }, 12000);
+    try { engine.start(); }
+    catch (error) { stopEngineCompletely(); showError('语音服务启动失败，请检查权限后重试。'); }
+}
+
+function toggleListening() {
+    if (isUserTracking) { stopEngineCompletely(); return; }
+    const script = scripts.find(s => s.id === currentScriptId);
+    if (!script || currentView !== 'present' || !wordTokens.length) return;
+    isUserTracking = true;
+    _engineFailures = 0;
+    hideError();
+    initSpeechRecognition(script.language);
+    updateTranscriptUI();
+}
+
+function stopEngineCompletely() {
+    isUserTracking = false;
+    _finishSpeechSession();
+    _detachRecognition();
+    stopAudioVisualizer();
+    updateMicUI();
+}
+
+function updateTrackingStatus() {
+    const status = document.getElementById('tracking-status');
+    if (!status) return;
+    const progress = targetWordIndex >= wordTokens.length && wordTokens.length ? '稿件已读完，可点击词语重新定位。' : '进度 ' + Math.min(targetWordIndex, wordTokens.length) + ' / ' + wordTokens.length + ' · 点击正文可校准位置。';
+    status.textContent = isEngineStarting ? '正在连接语音服务，请稍候…' : _engineRestarting ? '语音服务重连中…' : progress;
+}
+
+function updateMicUI() {
+    const btn = document.getElementById('btn-mic');
+    const iconContainer = document.getElementById('mic-icon-container');
+    const textEl = document.getElementById('mic-text');
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', String(isUserTracking));
+    if (isUserTracking) {
+        btn.className = 'flex items-center justify-center space-x-2 px-6 py-4 rounded-xl font-bold text-white transition-all shadow-md bg-red-500 hover:bg-red-600 w-full';
+        iconContainer.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect width="14" height="14" x="5" y="5" rx="3"/></svg>';
+        textEl.textContent = isEngineStarting ? '连接中 · 点击取消' : _engineRestarting ? '重连中 · 点击取消' : '暂停追踪';
+    } else {
+        btn.className = 'flex items-center justify-center space-x-2 px-6 py-4 rounded-xl font-bold text-white transition-all shadow-md bg-indigo-600 hover:bg-indigo-700 w-full';
+        iconContainer.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>';
+        textEl.textContent = '开始追踪';
+    }
+    const toolbarBtn = document.getElementById('toolbar-mic-btn');
+    toolbarBtn.setAttribute('aria-pressed', String(isUserTracking));
+    toolbarBtn.querySelector('span').textContent = textEl.textContent;
+    updateTrackingStatus();
+    if (pipWindow && !pipWindow.closed) renderPiP();
+}
+
+function showError(msg) {
+    document.getElementById('error-msg').textContent = msg;
+    document.getElementById('error-banner').classList.remove('hidden');
+}
+function hideError() { document.getElementById('error-banner').classList.add('hidden'); }
+
+
+// ===================== 小窗模式 =====================
+let isMiniMode = false;
+const MINI_BREAKPOINT = 600; // px
+
+function checkMiniMode() {
+    // 窄屏使用响应式正文与控制台，保留开始/暂停和计时操作。
+    if (currentView !== 'present' && isMiniMode) hideMiniWindow();
+}
+
+function showMiniWindow() {
+    isMiniMode = true;
+    _miniLastWordIndex = -1;   // 重置缓存，强制下次重绘
+    document.getElementById('mini-window').classList.add('visible');
+    // 隐藏主界面 header 和 present 面板（保留但不显示）
+    document.getElementById('main-header').style.display = 'none';
+    const vp = document.getElementById('view-present');
+    if (vp) vp.style.visibility = 'hidden';
+    updateMiniWindow();
+    initMiniDrag();
+}
+
+function hideMiniWindow() {
+    isMiniMode = false;
+    const mw = document.getElementById('mini-window');
+    mw.style.opacity = '0';
+    mw.style.transform = 'scale(0.92) translateY(12px)';
+    setTimeout(() => {
+        mw.classList.remove('visible');
+        mw.style.opacity = '';
+        mw.style.transform = '';
+    }, 300);
+    document.getElementById('main-header').style.display = '';
+    const vp = document.getElementById('view-present');
+    if (vp) vp.style.visibility = '';
+}
+
+let _miniLastWordIndex = -1;
+let _miniRafPending = false;
+function updateMiniWindow() {
+    if (!isMiniMode || currentView !== 'present') return;
+    if (_miniLastWordIndex === currentWordIndex) return;   // 未变化，跳过
+    if (_miniRafPending) return;
+    _miniRafPending = true;
+    requestAnimationFrame(() => {
+        _miniRafPending = false;
+        _renderMiniWindow();
+    });
+}
+
+function _renderMiniWindow() {
+    _miniLastWordIndex = currentWordIndex;
+
+    // 找到当前所在句子索引
+    let activeSentIdx = -1;
+    for (let i = 0; i < parsedData.length; i++) {
+        if (parsedData[i].words.some(w => w.globalIndex === currentWordIndex)) {
+            activeSentIdx = i; break;
+        }
+        if (parsedData[i].words.length > 0 &&
+            parsedData[i].words[parsedData[i].words.length-1].globalIndex < currentWordIndex) {
+            activeSentIdx = i;
+        }
+    }
+
+    function sentText(idx) {
+        if (idx < 0 || idx >= parsedData.length) return '';
+        return parsedData[idx].words.map(w => w.text).join(' ');
+    }
+
+    const activeEl = document.getElementById('mini-active');
+    if (activeSentIdx >= 0) {
+        const words = parsedData[activeSentIdx].words;
+        activeEl.innerHTML = words.map(w => {
+            if (w.globalIndex < currentWordIndex)
+                return `<span class="mini-word-past">${w.text}</span>`;
+            if (w.globalIndex === currentWordIndex)
+                return `<span class="mini-word-active">${w.text}</span>`;
+            return `<span class="mini-word-future">${w.text}</span>`;
+        }).join(' ');
+    } else {
+        activeEl.textContent = '';
+    }
+
+    document.getElementById('mini-past2').textContent  = sentText(activeSentIdx - 2);
+    document.getElementById('mini-prev').textContent   = sentText(activeSentIdx - 1);
+    document.getElementById('mini-next').textContent   = sentText(activeSentIdx + 1);
+    document.getElementById('mini-future').textContent = sentText(activeSentIdx + 2);
+
+    const total = wordTokens.length;
+    const pct = total > 0 ? Math.round((targetWordIndex / total) * 100) : 0;
+    document.getElementById('mini-progress-fill').style.width = pct + '%';
+}
+
+// 拖动支持
+function initMiniDrag() {
+    const win = document.getElementById('mini-window');
+    const bar = document.getElementById('mini-drag-bar');
+    let dragging = false, ox = 0, oy = 0;
+
+    bar.onmousedown = (e) => {
+        if (e.target.tagName === 'SPAN') return; // 按钮不触发拖动
+        dragging = true;
+        ox = e.clientX - win.offsetLeft;
+        oy = e.clientY - win.offsetTop;
+        win.style.right = 'auto';
+        win.style.bottom = 'auto';
+        e.preventDefault();
+    };
+    document.onmousemove = (e) => {
+        if (!dragging) return;
+        win.style.left = (e.clientX - ox) + 'px';
+        win.style.top  = (e.clientY - oy) + 'px';
+    };
+    document.onmouseup = () => { dragging = false; };
+}
+
+
+// ===================== 画中画模式 =====================
+let pipWindow = null;
+let pipUpdateInterval = null;
+let _pipLastRenderKey = '';
+
+// 画中画：当前显示的句子索引（可通过滚轮或自动推进修改）
+let pipViewSentIdx = -1;
+let pipLastAutoSentIdx = -1; // 记录上一次自动推进时的句子，避免重复触发
+
+async function togglePiP() {
+    if (pipWindow && !pipWindow.closed) {
+        pipWindow.close();
+        return;
+    }
+
+    if (!('documentPictureInPicture' in window)) {
+        alert('您的浏览器不支持画中画模式（需要 Chrome 116+）。\n\n提示：可以将浏览器小窗口拖到屏幕边角代替。');
+        return;
+    }
+
+    try {
+        pipWindow = await window.documentPictureInPicture.requestWindow({
+            width: 440,
+            height: 230,
+            disallowReturnToOpener: false,
+        });
+
+        const style = pipWindow.document.createElement('style');
+        style.textContent = `
+            * { margin:0; padding:0; box-sizing:border-box; user-select: none; -webkit-user-select: none; }
+            body {
+                background: rgba(12,15,26,0.97);
+                font-family: 'Inter', system-ui, sans-serif;
+                color: white;
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                padding: 14px 20px 42px;
+                overflow: hidden;
+                cursor: default;
+            }
+            .pip-line {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                line-height: 1.55;
+                transition: opacity 0.2s, font-size 0.2s;
+                padding: 1px 0;
+            }
+            .pip-past   { color: rgba(255,255,255,0.15); font-size: 0.7rem; }
+            .pip-prev   { color: rgba(255,255,255,0.3); font-size: 0.83rem; margin-bottom: 3px; }
+            .pip-active {
+                font-size: 1.08rem; font-weight: 700;
+                margin: 3px 0;
+                white-space: normal; line-height: 1.65;
+                padding: 4px 8px;
+                border-radius: 8px;
+                background: rgba(253,224,71,0.06);
+                border-left: 2px solid rgba(253,224,71,0.4);
+                cursor: pointer;
+            }
+            .pip-active:hover { background: rgba(253,224,71,0.1); }
+            .pip-next   { color: rgba(255,255,255,0.3); font-size: 0.83rem; margin-top: 3px; }
+            .pip-future { color: rgba(255,255,255,0.15); font-size: 0.7rem; }
+            .pip-w-past    { color: rgba(255,255,255,0.2); }
+            .pip-w-active  {
+                background: #fde047; color: #0f172a;
+                border-radius: 4px; padding: 1px 5px;
+                font-weight: 800;
+                box-shadow: 0 2px 12px rgba(253,224,71,0.5);
+                cursor: pointer;
+            }
+            .pip-w-active:hover { background: #fef08a; }
+            .pip-w-future  { color: rgba(255,255,255,0.72); cursor: pointer; }
+            .pip-w-future:hover { color: #fff; }
+            .pip-scroll-hint {
+                position: absolute; top: 6px; right: 10px;
+                font-size: 0.58rem; color: rgba(255,255,255,0.2);
+                letter-spacing: 0.04em;
+                pointer-events: none;
+            }
+            .pip-progress {
+                position: absolute; bottom: 0; left: 0; right: 0;
+                height: 2px; background: rgba(255,255,255,0.06);
+            }
+            .pip-progress-fill {
+                height: 100%;
+                background: linear-gradient(90deg, #6366f1, #fde047);
+                transition: width 0.35s ease;
+            }
+            .pip-auto-badge {
+                position: absolute; top: 7px; left: 10px;
+                font-size: 0.58rem; color: rgba(99,102,241,0.5);
+                letter-spacing: 0.04em;
+                transition: opacity 0.4s;
+            }
+            /* 追踪控制栏 */
+            .pip-track-bar {
+                position: absolute;
+                bottom: 6px;
+                left: 50%;
+                transform: translateX(-50%);
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                z-index: 10;
+            }
+            .pip-track-btn {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                padding: 4px 12px 4px 9px;
+                border-radius: 20px;
+                border: 1px solid rgba(99,102,241,0.35);
+                background: rgba(99,102,241,0.12);
+                color: rgba(180,185,255,0.85);
+                font-size: 0.65rem;
+                font-weight: 700;
+                letter-spacing: 0.04em;
+                cursor: pointer;
+                transition: all 0.18s ease;
+                white-space: nowrap;
+                user-select: none;
+            }
+            .pip-track-btn:hover {
+                background: rgba(99,102,241,0.25);
+                border-color: rgba(99,102,241,0.6);
+                color: #fff;
+                transform: scale(1.04);
+            }
+            .pip-track-btn.active {
+                background: rgba(239,68,68,0.18);
+                border-color: rgba(239,68,68,0.5);
+                color: rgba(255,160,160,0.95);
+            }
+            .pip-track-btn.active:hover {
+                background: rgba(239,68,68,0.3);
+            }
+            .pip-track-dot {
+                width: 6px; height: 6px;
+                border-radius: 50%;
+                background: currentColor;
+                flex-shrink: 0;
+            }
+            .pip-track-btn.active .pip-track-dot {
+                animation: pipPulse 1.1s ease-in-out infinite;
+            }
+            @keyframes pipPulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.4; transform: scale(0.7); }
+            }
+        `;
+        pipWindow.document.head.appendChild(style);
+
+        const fontLink = pipWindow.document.createElement('link');
+        fontLink.rel = 'stylesheet';
+        fontLink.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap';
+        pipWindow.document.head.appendChild(fontLink);
+
+        pipWindow.document.body.innerHTML = `
+            <div class="pip-auto-badge" id="pip-auto-badge">● 自动跟进</div>
+            <div class="pip-scroll-hint">滚轮翻句 · 点词校准</div>
+            <div class="pip-line pip-past"   id="pip-past2"></div>
+            <div class="pip-line pip-prev"   id="pip-prev"></div>
+            <div class="pip-line pip-active" id="pip-active"></div>
+            <div class="pip-line pip-next"   id="pip-next"></div>
+            <div class="pip-line pip-future" id="pip-future"></div>
+            <div class="pip-track-bar">
+                <button class="pip-track-btn" id="pip-track-btn" onclick="window._pipToggleTracking()">
+                    <span class="pip-track-dot"></span>
+                    <span id="pip-track-label">开始追踪</span>
+                </button>
+            </div>
+            <div class="pip-progress"><div class="pip-progress-fill" id="pip-fill" style="width:0%"></div></div>
+        `;
+
+        // 初始化视图句子索引
+        _pipLastRenderKey = '';
+        pipViewSentIdx = -1;
+        pipLastAutoSentIdx = -1;
+
+        // ---- 桥接主窗口追踪控制（闭包直接引用，不依赖 opener）----
+        pipWindow._pipToggleTracking = function() {
+            toggleListening();          // 直接调用主窗口作用域内的函数
+            _renderPiPNow();            // 立即刷新按钮状态，无需等下一个 interval
+        };
+
+        // ---- 滚轮翻句 ----
+        pipWindow.document.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const dir = e.deltaY > 0 ? 1 : -1;
+            const cur = getPipActiveSentIdx();
+            const target = Math.max(0, Math.min(parsedData.length - 1, cur + dir));
+            pipViewSentIdx = target;
+            renderPiP();
+        }, { passive: false });
+
+        // ---- 点词校准：单击词语立即校准，光标落在该词上 ----
+        pipWindow.document.addEventListener('click', (e) => {
+            // 向上找最近的有 data-gidx 属性的元素（解决点击边缘时 target 是容器的问题）
+            const wordEl = e.target.closest('[data-gidx]');
+            if (!wordEl) return;
+            const gidx = wordEl.dataset.gidx;
+            if (gidx === undefined || gidx === '') return;
+            const idx = parseInt(gidx);
+            if (isNaN(idx)) return;
+
+            jumpToWord(idx);
+            _renderPiPNow();
+        });
+
+        updatePiP();
+        pipUpdateInterval = setInterval(updatePiP, 250);
+
+        pipWindow.addEventListener('pagehide', () => {
+            clearInterval(pipUpdateInterval);
+            pipWindow = null;
+            pipViewSentIdx = -1;
+            const btn = document.getElementById('pip-btn');
+            if (btn) btn.textContent = '⧉ 画中画';
+            const sb = document.getElementById('pip-sidebar-btn');
+            if (sb) sb.querySelector('span').textContent = '画中画悬浮';
+        });
+
+        document.getElementById('pip-btn').textContent = '⧉ 关闭画中画';
+        const sb = document.getElementById('pip-sidebar-btn');
+        if (sb) sb.querySelector('span').textContent = '关闭画中画';
+
+    } catch(e) {
+        console.error('PiP failed:', e);
+        alert('无法开启画中画：' + e.message);
+    }
+}
+
+// 获取当前语音追踪到的句子索引
+function getTrackedSentIdx() {
+    return wordTokens[currentWordIndex]?.sentenceIndex ?? -1;
+}
+
+// 画中画实际显示的句子（滚轮偏移 or 自动跟踪）
+function getPipActiveSentIdx() {
+    if (pipViewSentIdx >= 0) return pipViewSentIdx;
+    return getTrackedSentIdx();
+}
+
+let _pipRafPending = false;
+function renderPiP() {
+    if (!pipWindow || pipWindow.closed) return;
+    if (_pipLastRenderKey === _getPiPRenderKey()) return;
+    // 合并同一帧内的多次调用，避免 interval 和点击同帧双重重建 DOM
+    if (_pipRafPending) return;
+    _pipRafPending = true;
+    requestAnimationFrame(() => {
+        _pipRafPending = false;
+        if (_pipLastRenderKey !== _getPiPRenderKey()) _renderPiPNow();
+    });
+}
+function _getPiPRenderKey() {
+    return [currentScriptId, currentWordIndex, targetWordIndex, pipViewSentIdx, isUserTracking, isEngineStarting, _engineRestarting].join('|');
+}
+function _renderPiPNow() {
+    if (!pipWindow || pipWindow.closed) return;
+    _pipLastRenderKey = _getPiPRenderKey();
+    const d = pipWindow.document;
+
+    const activeSentIdx = getPipActiveSentIdx();
+    const trackedSentIdx = getTrackedSentIdx();
+
+    function sentText(idx) {
+        if (idx < 0 || idx >= parsedData.length) return '';
+        return parsedData[idx].words.map(w => w.text).join(' ');
+    }
+
+    // 上下文纯文本行
+    const setT = (id, text) => { const el = d.getElementById(id); if(el) el.textContent = text; };
+    setT('pip-past2', sentText(activeSentIdx - 2));
+    setT('pip-prev',  sentText(activeSentIdx - 1));
+    setT('pip-next',  sentText(activeSentIdx + 1));
+    setT('pip-future', sentText(activeSentIdx + 2));
+
+    // 当前句：带高亮的词 span，每个词附带 data-gidx 用于点击校准
+    const activeEl = d.getElementById('pip-active');
+    if (activeEl && activeSentIdx >= 0) {
+        const words = parsedData[activeSentIdx].words;
+        activeEl.innerHTML = words.map((w, i) => {
+            const g = w.globalIndex;
+            const space = i < words.length - 1 ? '<span style="color:inherit;opacity:0.4;"> </span>' : '';
+            if (g < currentWordIndex)
+                return `<span class="pip-w-past" data-gidx="${g}">${w.text}</span>${space}`;
+            if (g === currentWordIndex)
+                return `<span class="pip-w-active" data-gidx="${g}">${w.text}</span>${space}`;
+            return `<span class="pip-w-future" data-gidx="${g}">${w.text}</span>${space}`;
+        }).join('');
+    } else if (activeEl) {
+        activeEl.innerHTML = '';
+    }
+
+    // 自动跟随徽章：若用户手动滚轮偏移了，淡出
+    const badge = d.getElementById('pip-auto-badge');
+    if (badge) {
+        badge.style.opacity = (pipViewSentIdx < 0) ? '1' : '0';
+    }
+
+    // 进度条
+    const total = wordTokens.length;
+    const pct = total > 0 ? Math.round((targetWordIndex / total) * 100) : 0;
+    const fill = d.getElementById('pip-fill');
+    if (fill) fill.style.width = pct + '%';
+
+    // 追踪按钮状态同步
+    const trackBtn = d.getElementById('pip-track-btn');
+    const trackLabel = d.getElementById('pip-track-label');
+    if (trackBtn && trackLabel) {
+        if (isUserTracking) {
+            trackBtn.classList.add('active');
+            trackLabel.textContent = isEngineStarting ? '连接中…' : _engineRestarting ? '重连中…' : '暂停追踪';
+        } else {
+            trackBtn.classList.remove('active');
+            trackLabel.textContent = '开始追踪';
+        }
+    }
+}
+
+function updatePiP() {
+    if (!pipWindow || pipWindow.closed) {
+        clearInterval(pipUpdateInterval);
+        const btn = document.getElementById('pip-btn');
+        if (btn) btn.textContent = '⧉ 画中画';
+        return;
+    }
+    if (parsedData.length === 0) return;
+
+    const trackedSentIdx = getTrackedSentIdx();
+
+    if (trackedSentIdx >= 0 && trackedSentIdx !== pipLastAutoSentIdx) {
+        if (pipLastAutoSentIdx >= 0) pipViewSentIdx = -1;
+        pipLastAutoSentIdx = trackedSentIdx;
+    }
+
+    renderPiP();
+}
+// =====================================================
+
+// 监听窗口大小变化
+window.addEventListener('resize', checkMiniMode);
+// =====================================================
+
+
+// ===================== 转录框滚动管理 =====================
+let _transcriptUserScrolled = false;
+
+function initTranscriptScroll() {
+    const box = document.getElementById('transcript-box');
+    const jumpBtn = document.getElementById('transcript-jump-btn');
+    if (!box || box.dataset.scrollBound) return;
+    box.dataset.scrollBound = 'true';
+    box.addEventListener('scroll', () => {
+        const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 32;
+        _transcriptUserScrolled = !atBottom;
+        if (jumpBtn) jumpBtn.style.display = _transcriptUserScrolled ? 'block' : 'none';
+    });
+}
+
+function transcriptJumpToBottom() {
+    const box = document.getElementById('transcript-box');
+    if (box) { box.scrollTop = box.scrollHeight; }
+    _transcriptUserScrolled = false;
+    const jumpBtn = document.getElementById('transcript-jump-btn');
+    if (jumpBtn) jumpBtn.style.display = 'none';
+}
+
+// 用户上翻历史时保留阅读位置。
+function updateTranscriptUI() {
+    const placeholder = document.getElementById('transcript-placeholder');
+    const confirmed   = document.getElementById('transcript-confirmed');
+    const interim     = document.getElementById('transcript-interim');
+    const cursor      = document.getElementById('transcript-cursor');
+    const box         = document.getElementById('transcript-box');
+    if (!confirmed) return;
+    const hasContent = _transcriptConfirmed.length > 0 || _transcriptInterim.length > 0;
+    if (placeholder) placeholder.style.display = hasContent ? 'none' : '';
+    confirmed.textContent = _transcriptConfirmed;
+    interim.textContent   = _transcriptInterim;
+    if (cursor) cursor.classList.toggle('hidden', !isUserTracking);
+    // 只有用户没有手动上翻时，才自动滚到底部
+    if (box && !_transcriptUserScrolled) {
+        box.scrollTop = box.scrollHeight;
+    }
+}
+// =====================================================
+
+
+// ===================== 计时器模块 =====================
+let _timerTotal = 5 * 60;
+let _timerLeft = 5 * 60;
+let _timerRemainingMs = 5 * 60000;
+let _timerDeadline = 0;
+let _timerInterval = null;
+let _timerRunning = false;
+
+function timerUpdateSetup() { timerReset(); }
+
+function timerPause() {
+    if (_timerRunning) {
+        _timerRemainingMs = Math.max(0, _timerDeadline - Date.now());
+        _timerLeft = Math.ceil(_timerRemainingMs / 1000);
+    }
+    _timerRunning = false;
+    clearInterval(_timerInterval);
+    _timerInterval = null;
+    _timerRenderDisplay();
+}
+
+function timerToggle() {
+    if (_timerRunning) { timerPause(); return; }
+    if (_timerRemainingMs <= 0) { _timerRemainingMs = _timerTotal * 1000; _timerLeft = _timerTotal; }
+    _timerRunning = true;
+    _timerDeadline = Date.now() + _timerRemainingMs;
+    document.getElementById('timer-setup').style.display = 'none';
+    document.getElementById('timer-running-panel').style.display = 'flex';
+    clearInterval(_timerInterval);
+    _timerInterval = setInterval(_timerTick, 250);
+    _timerRenderDisplay();
+}
+
+function timerReset() {
+    clearInterval(_timerInterval);
+    _timerInterval = null;
+    _timerRunning = false;
+    const input = document.getElementById('timer-minutes-input');
+    const value = Number(input.value);
+    const minutes = Number.isFinite(value) ? Math.max(1, Math.min(180, Math.floor(value))) : 5;
+    input.value = minutes;
+    _timerTotal = _timerLeft = minutes * 60;
+    _timerRemainingMs = _timerTotal * 1000;
+    _timerDeadline = 0;
+    _timerRenderDisplay();
+    document.getElementById('timer-running-panel').style.display = 'none';
+    document.getElementById('timer-setup').style.display = 'flex';
+}
+
+function _timerTick() {
+    if (!_timerRunning) return;
+    _timerRemainingMs = Math.max(0, _timerDeadline - Date.now());
+    _timerLeft = Math.ceil(_timerRemainingMs / 1000);
+    if (_timerRemainingMs === 0) {
+        _timerRunning = false;
+        clearInterval(_timerInterval);
+        _timerInterval = null;
+        try { navigator.vibrate?.([200, 100, 200]); } catch (error) {}
+    }
+    _timerRenderDisplay();
+}
+
+function _timerRenderDisplay() {
+    const display = document.getElementById('timer-display');
+    const fill = document.getElementById('timer-progress-fill');
+    if (!display) return;
+    display.textContent = String(Math.floor(_timerLeft / 60)).padStart(2, '0') + ':' + String(_timerLeft % 60).padStart(2, '0');
+    const percent = _timerTotal ? _timerLeft / _timerTotal * 100 : 0;
+    const color = percent <= 10 ? '#ef4444' : percent <= 25 ? '#f59e0b' : '#1e293b';
+    display.style.color = color;
+    if (fill) { fill.style.width = percent + '%'; fill.style.background = percent <= 10 ? '#ef4444' : percent <= 25 ? '#f59e0b' : '#6366f1'; }
+    const button = document.getElementById('timer-pause-btn');
+    button.textContent = _timerRunning ? '暂停' : _timerLeft <= 0 ? '重新开始' : '继续';
+    button.style.background = _timerLeft <= 0 ? '#fef2f2' : '#e0e7ff';
+    button.style.color = _timerLeft <= 0 ? '#dc2626' : '#4338ca';
+    display.setAttribute('aria-label', _timerLeft <= 0 ? '计时结束' : '剩余 ' + _timerLeft + ' 秒');
+}
+document.addEventListener('visibilitychange', () => { if (_timerRunning) _timerTick(); });
+window.addEventListener('pagehide', () => { flushEditorSave(); stopEngineCompletely(); });
+window.addEventListener('resize', () => {
+    applySidebarLayout(false);
+    if (currentView === 'present' && _prompterFollowing) _scheduleScroll(wordElCache.get(currentWordIndex), true);
+});
+// =====================================================
+
+
+// ===================== 红色高光标记模块 =====================
+let _highlightMode = false;
+// 持久化存储：{ scriptId: { globalIndex: true } }
+function _getHighlights() {
+    if (!currentScriptId) return {};
+    const all = JSON.parse(localStorage.getItem('vocalflow_highlights') || '{}');
+    return all[currentScriptId] || {};
+}
+function _saveHighlights(highlights) {
+    if (!currentScriptId) return;
+    const all = JSON.parse(localStorage.getItem('vocalflow_highlights') || '{}');
+    all[currentScriptId] = highlights;
+    localStorage.setItem('vocalflow_highlights', JSON.stringify(all));
+}
+
+function toggleHighlightMode() {
+    _highlightMode = !_highlightMode;
+    document.body.classList.toggle('highlight-mode', _highlightMode);
+    const toolbar = document.getElementById('highlight-toolbar');
+    const btn     = document.getElementById('highlight-toggle-btn');
+    const label   = document.getElementById('highlight-btn-label');
+    if (toolbar) toolbar.classList.toggle('active', _highlightMode);
+    if (btn) {
+        btn.className = _highlightMode
+            ? 'w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-300 bg-red-50 text-red-600 text-xs font-bold transition-all active:scale-95'
+            : 'w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 bg-white hover:border-red-300 hover:bg-red-50 text-slate-500 hover:text-red-600 text-xs font-bold transition-all active:scale-95';
+    }
+    if (label) label.textContent = _highlightMode ? '退出标记模式' : '进入标记模式';
+}
+
+function _applyHighlightsToDOM() {
+    const highlights = _getHighlights();
+    wordElCache.forEach((el, idx) => {
+        if (highlights[idx]) {
+            el.classList.add('word-highlight');
+        } else {
+            el.classList.remove('word-highlight');
+        }
+    });
+}
+
+function _handleHighlightClick(globalIndex, wordEl) {
+    if (!_highlightMode) return false;  // 未进入标记模式，不拦截
+    const highlights = _getHighlights();
+    if (highlights[globalIndex]) {
+        delete highlights[globalIndex];
+        wordEl.classList.remove('word-highlight');
+    } else {
+        highlights[globalIndex] = true;
+        wordEl.classList.add('word-highlight');
+    }
+    _saveHighlights(highlights);
+    return true;  // 已处理，阻止跳转
+}
+// =====================================================
+
+window.onload = init;
+
+// ===================== 便利贴模块 =====================
+
+function initStickyNote() {
+    // 恢复文本区内容
+    const savedText = localStorage.getItem('vocalflow_sticky_text') || '';
+    const ta = document.getElementById('sticky-note-textarea');
+    if (ta) ta.value = savedText;
+
+    // 克隆节点以清除所有旧的事件监听器，防止重复绑定
+    const dropZone = document.getElementById('sticky-drop-zone');
+    if (!dropZone) return;
+    const newZone = dropZone.cloneNode(true);
+    dropZone.parentNode.replaceChild(newZone, dropZone);
+
+    newZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        newZone.classList.add('drag-over');
+    });
+    newZone.addEventListener('dragleave', () => {
+        newZone.classList.remove('drag-over');
+    });
+    newZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        newZone.classList.remove('drag-over');
+        const word = e.dataTransfer.getData('text/plain');
+        if (word) addWordToSticky(word);
+    });
+}
+
+function makeDraggable(wordSpan, wordText) {
+    wordSpan.setAttribute('draggable', 'true');
+    wordSpan.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', wordText);
+        e.dataTransfer.effectAllowed = 'copy';
+        wordSpan.classList.add('dragging');
+    });
+    wordSpan.addEventListener('dragend', () => {
+        wordSpan.classList.remove('dragging');
+    });
+}
+
+function addWordToSticky(word) {
+    // 先在笔记中插入占位行
+    const ta = document.getElementById('sticky-note-textarea');
+    const placeholder = `${word} → 翻译中...\n`;
+    ta.value += placeholder;
+    saveStickyNote();
+
+    // 调用翻译 API，完成后替换占位文字
+    translateWordInline(word, placeholder);
+}
+
+async function translateWordInline(word, placeholder) {
+    try {
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|zh`;
+        const response = await fetch(url);
+        const data = await response.json();
+        const translation = data.responseData?.translatedText?.trim() || '—';
+        const ta = document.getElementById('sticky-note-textarea');
+        ta.value = ta.value.replace(placeholder, `${word} → ${translation}\n`);
+        saveStickyNote();
+    } catch (err) {
+        const ta = document.getElementById('sticky-note-textarea');
+        ta.value = ta.value.replace(placeholder, `${word} → 翻译失败\n`);
+        saveStickyNote();
+    }
+}
+
+
+
+function clearStickyNote() {
+    if (!confirm('确定清空便利贴所有内容？')) return;
+    const ta = document.getElementById('sticky-note-textarea');
+    if (ta) { ta.value = ''; localStorage.removeItem('vocalflow_sticky_text'); }
+}
+
+function saveStickyNote() {
+    const ta = document.getElementById('sticky-note-textarea');
+    if (ta) localStorage.setItem('vocalflow_sticky_text', ta.value);
+}
+
+
+// =====================================================
+</script>
+
+    <!-- 小窗模式 -->
+    <div id="mini-window">
+        <div id="mini-drag-bar">
+            <div id="mini-drag-dots">
+                <span id="mini-close-btn"   title="关闭小窗" style="cursor:pointer;" onclick="hideMiniWindow()"></span>
+                <span id="mini-min-btn"     title="最小化" style="cursor:pointer;"></span>
+                <span id="mini-expand-btn"  title="还原大窗" style="cursor:pointer;" onclick="hideMiniWindow()"></span>
+            </div>
+            <span id="mini-title">VocalFlow · 小窗</span>
+            <button onclick="togglePiP()" title="画中画 - 悬浮在所有窗口之上" id="pip-btn" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:0.65rem;font-weight:600;letter-spacing:0.04em;padding:2px 6px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);transition:all 0.2s;" onmouseover="this.style.color='rgba(255,255,255,0.8)'" onmouseout="this.style.color='rgba(255,255,255,0.35)'">⧉ 画中画</button>
+        </div>
+
+        <div id="mini-context-lines">
+            <div class="mini-line mini-line-past"   id="mini-past2"></div>
+            <div class="mini-line mini-line-prev"   id="mini-prev"></div>
+            <div class="mini-line mini-line-active" id="mini-active"></div>
+            <div class="mini-line mini-line-next"   id="mini-next"></div>
+            <div class="mini-line mini-line-future" id="mini-future"></div>
+        </div>
+
+        <div id="mini-progress-track">
+            <div id="mini-progress-fill" style="width:0%"></div>
+        </div>
+    </div>
+    <div id="mini-trigger-hint">可使用画中画悬浮提词</div>
+
+</body>
+</html>
